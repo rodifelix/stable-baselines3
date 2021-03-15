@@ -1,2 +1,2 @@
-from stable_baselines3.dqn.pg_dqn import DQN
-from stable_baselines3.dqn.pg_policies import CnnPolicy, MlpPolicy
+from stable_baselines3.pg_baseline.pg_dqn import DQN
+from stable_baselines3.pg_baseline.pg_policies import CnnPolicy, MlpPolicy
