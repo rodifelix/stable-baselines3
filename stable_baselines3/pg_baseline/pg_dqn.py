@@ -8,10 +8,10 @@ from stable_baselines3.common import logger
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback
 from stable_baselines3.common.utils import get_linear_fn, polyak_update
-from stable_baselines3.dqn.policies import DQNPolicy
+from pg_baseline.pg_policies import PGDQNPolicy
 
 
-class DQN(OffPolicyAlgorithm):
+class PGDQN(OffPolicyAlgorithm):
     """
     Deep Q-Network (DQN)
 
@@ -57,19 +57,19 @@ class DQN(OffPolicyAlgorithm):
 
     def __init__(
         self,
-        policy: Union[str, Type[DQNPolicy]],
+        policy: Union[str, Type[PGDQNPolicy]],
         env: Union[GymEnv, str],
         learning_rate: Union[float, Callable] = 1e-4,
-        buffer_size: int = 1000000,
-        learning_starts: int = 50000,
-        batch_size: Optional[int] = 32,
+        buffer_size: int = 100,
+        learning_starts: int = 10,
+        batch_size: Optional[int] = 5,
         tau: float = 1.0,
         gamma: float = 0.99,
         train_freq: int = 4,
         gradient_steps: int = 1,
         n_episodes_rollout: int = -1,
         optimize_memory_usage: bool = False,
-        target_update_interval: int = 10000,
+        target_update_interval: int = 50,
         exploration_fraction: float = 0.1,
         exploration_initial_eps: float = 1.0,
         exploration_final_eps: float = 0.05,
@@ -83,10 +83,10 @@ class DQN(OffPolicyAlgorithm):
         _init_setup_model: bool = True,
     ):
 
-        super(DQN, self).__init__(
+        super(PGDQN, self).__init__(
             policy,
             env,
-            DQNPolicy,
+            PGDQNPolicy, #TODO: <- is this correct?
             learning_rate,
             buffer_size,
             learning_starts,
@@ -118,11 +118,13 @@ class DQN(OffPolicyAlgorithm):
         self.exploration_schedule = None
         self.q_net, self.q_net_target = None, None
 
+        self.heightmap_resolution = 200
+
         if _init_setup_model:
             self._setup_model()
 
     def _setup_model(self) -> None:
-        super(DQN, self)._setup_model()
+        super(PGDQN, self)._setup_model()
         self._create_aliases()
         self.exploration_schedule = get_linear_fn(
             self.exploration_initial_eps, self.exploration_final_eps, self.exploration_fraction
@@ -138,6 +140,7 @@ class DQN(OffPolicyAlgorithm):
         This method is called in ``collect_rollout()`` after each step in the environment.
         """
         if self.num_timesteps % self.target_update_interval == 0:
+            #TODO: Assert this .parameters() call works
             polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
 
         self.exploration_rate = self.exploration_schedule(self._current_progress_remaining)
@@ -154,7 +157,8 @@ class DQN(OffPolicyAlgorithm):
 
             with th.no_grad():
                 # Compute the target Q values
-                target_q = self.q_net_target(replay_data.next_observations)
+                # forward type: batch size images, each with 16 rotations
+                target_q = self.q_net_target.forward(replay_data.next_observations)
                 # Follow greedy policy: use the one with the highest value
                 target_q, _ = target_q.max(dim=1)
                 # Avoid potential broadcast issue
@@ -163,10 +167,20 @@ class DQN(OffPolicyAlgorithm):
                 target_q = replay_data.rewards + (1 - replay_data.dones) * self.gamma * target_q
 
             # Get current Q estimates
-            current_q = self.q_net(replay_data.observations)
+            #TODO: USE SPECIFIC ROTATION HERE from replay_data.actions
+            # Can we pass multiple input tensors to net at the same time?
+            # What we need:
+            # Sequence of size [batch_size] of bot current_q value maps and target_q_value_maps
+            # target_q_value_maps are zeroes except for the specific location of the executed action pixel
+            # loss is only backpropagated for those pixels -> see pg_trainer.backprop for that
+
+            # current_q value maps are retrieved from a forward pass (with gradients on a specific rotation)
+            # output_prob[0][0].view(1, resolution + 2 * padding_width, resolution + 2 * padding_width)
+            # forward type, batch_size images, each with one specific rotation 
+            current_q = self.q_net.forward_specific_rotations(replay_data.observations, th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
 
             # Retrieve the q-values for the actions from the replay buffer
-            current_q = th.gather(current_q, dim=1, index=replay_data.actions.long())
+            current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
 
             # Compute Huber loss (less sensitive to outliers)
             loss = F.smooth_l1_loss(current_q, target_q)
@@ -217,12 +231,12 @@ class DQN(OffPolicyAlgorithm):
         eval_env: Optional[GymEnv] = None,
         eval_freq: int = -1,
         n_eval_episodes: int = 5,
-        tb_log_name: str = "DQN",
+        tb_log_name: str = "PGDQN",
         eval_log_path: Optional[str] = None,
         reset_num_timesteps: bool = True,
     ) -> OffPolicyAlgorithm:
 
-        return super(DQN, self).learn(
+        return super(PGDQN, self).learn(
             total_timesteps=total_timesteps,
             callback=callback,
             log_interval=log_interval,
@@ -235,7 +249,7 @@ class DQN(OffPolicyAlgorithm):
         )
 
     def _excluded_save_params(self) -> List[str]:
-        return super(DQN, self)._excluded_save_params() + ["q_net", "q_net_target"]
+        return super(PGDQN, self)._excluded_save_params() + ["q_net", "q_net_target"]
 
     def _get_torch_save_params(self) -> Tuple[List[str], List[str]]:
         state_dicts = ["policy", "policy.optimizer"]
