@@ -1,3 +1,3 @@
-from stable_baselines3.pg_baseline.pg_dqn import DQN
-from stable_baselines3.pg_baseline.pg_policies import CnnPolicy, MlpPolicy
-from stable_baselines3.pg_baseline.pg_densenet import PGdensenet121
+from pg_baseline.pg_dqn import DQN
+from pg_baseline.pg_policies import CnnPolicy, MlpPolicy
+from pg_baseline.pg_densenet import PGdensenet121
