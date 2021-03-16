@@ -166,16 +166,7 @@ class PGDQN(OffPolicyAlgorithm):
                 # 1-step TD target
                 target_q = replay_data.rewards + (1 - replay_data.dones) * self.gamma * target_q
 
-            # Get current Q estimates
-            #TODO: USE SPECIFIC ROTATION HERE from replay_data.actions
-            # Can we pass multiple input tensors to net at the same time?
-            # What we need:
-            # Sequence of size [batch_size] of bot current_q value maps and target_q_value_maps
-            # target_q_value_maps are zeroes except for the specific location of the executed action pixel
-            # loss is only backpropagated for those pixels -> see pg_trainer.backprop for that
-
-            # current_q value maps are retrieved from a forward pass (with gradients on a specific rotation)
-            # output_prob[0][0].view(1, resolution + 2 * padding_width, resolution + 2 * padding_width)
+            # Get current Q 
             # forward type, batch_size images, each with one specific rotation 
             current_q = self.q_net.forward_specific_rotations(replay_data.observations, th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
 
