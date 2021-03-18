@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import gym
 import torch as th
@@ -28,7 +28,6 @@ class PGQNetwork(BasePolicy):
         observation_space: gym.spaces.Space,
         action_space: gym.spaces.Space,
         heightmap_resolution: int,
-        use_cuda: bool,
     ):
         super(PGQNetwork, self).__init__(
             observation_space,
@@ -38,7 +37,6 @@ class PGQNetwork(BasePolicy):
         #TODO: assert observation space and action space specification is compatible with heightmap resolution
 
         self.heightmap_resolution = heightmap_resolution
-        self.use_cuda = use_cuda
 
         # Initialize network trunks with our version of DenseNet with InstanceNormalization
         self.push_color_trunk = pg_densenet.PGdensenet121()
@@ -124,12 +122,9 @@ class PGQNetwork(BasePolicy):
             input_depth_datas = input_depth_data
 
         # Rotate images clockwise
-        if self.use_cuda:
-            rotated_color_images = F.grid_sample(Variable(input_color_datas, requires_grad=False).cuda(), batch_flow_grid_before, mode='nearest')
-            rotated_depth_images = F.grid_sample(Variable(input_depth_datas, requires_grad=False).cuda(), batch_flow_grid_before, mode='nearest')
-        else:
-            rotated_color_images = F.grid_sample(Variable(input_color_datas, requires_grad=False), batch_flow_grid_before, mode='nearest')
-            rotated_depth_images = F.grid_sample(Variable(input_depth_datas, requires_grad=False), batch_flow_grid_before, mode='nearest')
+        rotated_color_images = F.grid_sample(Variable(input_color_datas, requires_grad=False).to(self.device), batch_flow_grid_before, mode='nearest')
+        rotated_depth_images = F.grid_sample(Variable(input_depth_datas, requires_grad=False).to(self.device), batch_flow_grid_before, mode='nearest')
+
         
         # Compute intermediate features
         interm_push_color_feat = self.push_color_trunk.features(rotated_color_images)
@@ -160,10 +155,7 @@ class PGQNetwork(BasePolicy):
             else:
                 affine_mat_after = th.cat((affine_mat_after, tmp_mat), dim=0)
 
-        if self.use_cuda:
-            flow_grid_after = F.affine_grid(Variable(affine_mat_after, requires_grad=False).cuda(), interm_push_feat_size)
-        else:
-            flow_grid_after = F.affine_grid(Variable(affine_mat_after, requires_grad=False), interm_push_feat_size)
+        flow_grid_after = F.affine_grid(Variable(affine_mat_after, requires_grad=False).to(self.device), interm_push_feat_size)
         return flow_grid_after
 
     def _build_flow_grid_before(self, diag_length):
@@ -182,11 +174,7 @@ class PGQNetwork(BasePolicy):
             else:
                 affine_mat_before = th.cat((affine_mat_before, tmp_mat), dim=0)
 
-        if self.use_cuda:
-            flow_grid_before = F.affine_grid(Variable(affine_mat_before).cuda(), (self.num_rotations, 3, diag_length, diag_length))
-        else:
-            flow_grid_before = F.affine_grid(Variable(affine_mat_before), (self.num_rotations, 3, diag_length, diag_length))
-            
+        flow_grid_before = F.affine_grid(Variable(affine_mat_before).to(self.device), (self.num_rotations, 3, diag_length, diag_length))
         return flow_grid_before
 
     def _get_flow_grids_for_indices(self, rotation_indices: th.Tensor):
@@ -206,8 +194,7 @@ class PGQNetwork(BasePolicy):
 
         data.update(
             dict(
-                heightmap_resolution=self.heightmap_resolution,
-                use_cuda=self.use_cuda,               
+                heightmap_resolution=self.heightmap_resolution,          
             )
         )
         return data
@@ -237,7 +224,6 @@ class PGDQNPolicy(BasePolicy):
         action_space: gym.spaces.Space,
         lr_schedule: Callable,
         heightmap_resolution: int,
-        use_cuda: bool,
         optimizer_class: Type[th.optim.Optimizer] = th.optim.SGD,
         optimizer_kwargs: Optional[Dict[str, Any]] = {
             "lr": 1e-4,
@@ -254,19 +240,16 @@ class PGDQNPolicy(BasePolicy):
         )
 
         self.heightmap_resolution = heightmap_resolution
-        self.use_cuda = use_cuda
 
         self.net_args = {
             "observation_space": self.observation_space,
             "action_space": self.action_space,
             "heightmap_resolution": self.heightmap_resolution,
-            "use_cuda": self.use_cuda,
         }
 
         self.q_net, self.q_net_target = None, None
         self._build(lr_schedule)
 
-        #TODO: assert self.device is consistent with use_cuda
 
     def _build(self, lr_schedule: Callable) -> None:
         """
@@ -300,7 +283,6 @@ class PGDQNPolicy(BasePolicy):
         data.update(
             dict(
                 heightmap_resolution=self.heightmap_resolution,
-                use_cuda=self.use_cuda,
                 lr_schedule=self._dummy_schedule,  # dummy lr schedule, not needed for loading policy alone
                 optimizer_class=self.optimizer_class,
                 optimizer_kwargs=self.optimizer_kwargs,
