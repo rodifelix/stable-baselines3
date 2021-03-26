@@ -112,12 +112,12 @@ class PGQNetwork(BasePolicy):
         """
         batch_size = input_color_data.shape[0]
         if rotation_indices is None:
-            batch_flow_grid_before = self.flow_grid_before.repeat((batch_size, 1, 1, 1))
-            batch_flow_grid_after = self.flow_grid_after.repeat((batch_size, 1, 1, 1))
+            batch_flow_grid_before = self.flow_grid_before.repeat((batch_size, 1, 1, 1)).to(self.device)
+            batch_flow_grid_after = self.flow_grid_after.repeat((batch_size, 1, 1, 1)).to(self.device)
             input_color_datas = th.repeat_interleave(input_color_data, 16, dim=0)
             input_depth_datas = th.repeat_interleave(input_depth_data, 16, dim=0)
         else:
-            batch_flow_grid_before, batch_flow_grid_after = self._get_flow_grids_for_indices(rotation_indices)
+            batch_flow_grid_before, batch_flow_grid_after = self._get_flow_grids_for_indices(rotation_indices).to(self.device)
             input_color_datas = input_color_data
             input_depth_datas = input_depth_data
 
