@@ -121,8 +121,8 @@ class PGQNetwork(BasePolicy):
             input_color_datas = input_color_data
             input_depth_datas = input_depth_data
 
-        batch_flow_grid_before = batch_flow_grid_before.to(self.device)
-        batch_flow_grid_after = batch_flow_grid_after.to(self.device)
+        #batch_flow_grid_before = batch_flow_grid_before.to(self.device)
+        #batch_flow_grid_after = batch_flow_grid_after.to(self.device)
 
         # Rotate images clockwise
         rotated_color_images = F.grid_sample(Variable(input_color_datas, requires_grad=False).to(self.device), batch_flow_grid_before, mode='nearest')
@@ -159,7 +159,7 @@ class PGQNetwork(BasePolicy):
                 affine_mat_after = th.cat((affine_mat_after, tmp_mat), dim=0)
 
         flow_grid_after = F.affine_grid(Variable(affine_mat_after, requires_grad=False).to(self.device), interm_push_feat_size)
-        return flow_grid_after
+        return flow_grid_after.to(self.device)
 
     def _build_flow_grid_before(self, diag_length):
         affine_mat_before = None
@@ -178,7 +178,7 @@ class PGQNetwork(BasePolicy):
                 affine_mat_before = th.cat((affine_mat_before, tmp_mat), dim=0)
 
         flow_grid_before = F.affine_grid(Variable(affine_mat_before).to(self.device), (self.num_rotations, 3, diag_length, diag_length))
-        return flow_grid_before
+        return flow_grid_before.to(self.device)
 
     def _get_flow_grids_for_indices(self, rotation_indices: th.Tensor):
         flow_grids_before = th.index_select(self.flow_grid_before, dim=0, index=th.squeeze(rotation_indices))
