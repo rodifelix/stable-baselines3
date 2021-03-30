@@ -181,8 +181,8 @@ class PGQNetwork(BasePolicy):
         return flow_grid_before.to(self.device)
 
     def _get_flow_grids_for_indices(self, rotation_indices: th.Tensor):
-        flow_grids_before = th.index_select(self.flow_grid_before, dim=0, index=th.squeeze(rotation_indices))
-        flow_grids_after = th.index_select(self.flow_grid_after, dim=0, index=th.squeeze(rotation_indices))
+        flow_grids_before = th.index_select(self.flow_grid_before, dim=0, index=th.squeeze(rotation_indices).to(self.device))
+        flow_grids_after = th.index_select(self.flow_grid_after, dim=0, index=th.squeeze(rotation_indices).to(self.device))
         return flow_grids_before, flow_grids_after
 
 
