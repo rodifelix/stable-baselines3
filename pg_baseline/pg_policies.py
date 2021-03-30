@@ -121,8 +121,8 @@ class PGQNetwork(BasePolicy):
             input_color_datas = input_color_data
             input_depth_datas = input_depth_data
 
-        #batch_flow_grid_before = batch_flow_grid_before.to(self.device)
-        #batch_flow_grid_after = batch_flow_grid_after.to(self.device)
+        batch_flow_grid_before = batch_flow_grid_before.to(self.device)
+        batch_flow_grid_after = batch_flow_grid_after.to(self.device)
 
         # Rotate images clockwise
         rotated_color_images = F.grid_sample(Variable(input_color_datas, requires_grad=False).to(self.device), batch_flow_grid_before, mode='nearest')
