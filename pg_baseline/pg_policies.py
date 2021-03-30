@@ -159,7 +159,7 @@ class PGQNetwork(BasePolicy):
                 affine_mat_after = th.cat((affine_mat_after, tmp_mat), dim=0)
 
         flow_grid_after = F.affine_grid(Variable(affine_mat_after, requires_grad=False).to(self.device), interm_push_feat_size)
-        return flow_grid_after.to(self.device)
+        return flow_grid_after
 
     def _build_flow_grid_before(self, diag_length):
         affine_mat_before = None
@@ -178,11 +178,11 @@ class PGQNetwork(BasePolicy):
                 affine_mat_before = th.cat((affine_mat_before, tmp_mat), dim=0)
 
         flow_grid_before = F.affine_grid(Variable(affine_mat_before).to(self.device), (self.num_rotations, 3, diag_length, diag_length))
-        return flow_grid_before.to(self.device)
+        return flow_grid_before
 
     def _get_flow_grids_for_indices(self, rotation_indices: th.Tensor):
-        flow_grids_before = th.index_select(self.flow_grid_before.to(self.device), dim=0, index=th.squeeze(rotation_indices).to(self.device))
-        flow_grids_after = th.index_select(self.flow_grid_after.to(self.device), dim=0, index=th.squeeze(rotation_indices).to(self.device))
+        flow_grids_before = th.index_select(self.flow_grid_before.to(self.device), dim=0, index=th.squeeze(rotation_indices))
+        flow_grids_after = th.index_select(self.flow_grid_after.to(self.device), dim=0, index=th.squeeze(rotation_indices))
         return flow_grids_before, flow_grids_after
 
 
