@@ -156,11 +156,13 @@ class PGDQN(OffPolicyAlgorithm):
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
 
             with th.no_grad():
+                # Select best estimated next action
+                _, action_idx = self.q_net.forward(replay_data.next_observations).max(dim=1).unsqueeze(0).T
                 # Compute the target Q values
                 # forward type: batch size images, each with 16 rotations
                 target_q = self.q_net_target.forward(replay_data.next_observations)
-                # Follow greedy policy: use the one with the highest value
-                target_q, _ = target_q.max(dim=1)
+                # Evaluate action with target network
+                target_q = target_q.gather(dim=1, index=action_idx.long())
                 # Avoid potential broadcast issue
                 target_q = target_q.reshape(-1, 1)
                 # 1-step TD target
