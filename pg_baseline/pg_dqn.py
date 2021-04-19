@@ -149,6 +149,7 @@ class PGDQN(OffPolicyAlgorithm):
     def _create_aliases(self) -> None:
         self.q_net = self.policy.q_net
         self.q_net_target = self.policy.q_net_target
+        self.pixels_per_rotation = self.heightmap_resolution * self.heightmap_resolution
 
     def _on_step(self) -> None:
         """
@@ -176,9 +177,10 @@ class PGDQN(OffPolicyAlgorithm):
                 _, action_idx = self.q_net.forward(replay_data.next_observations).max(dim=1)
                 action_idx = action_idx.unsqueeze(0).T
                 # Compute the target Q values
-                target_q = self.q_net_target.forward_specific_rotations(replay_data.next_observations, th.floor_divide(action_idx.long(), self.heightmap_resolution*self.heightmap_resolution))
+                target_q = self.q_net_target.forward_specific_rotations(replay_data.next_observations, th.remainder(th.floor_divide(action_idx.long(), self.pixels_per_rotation), 16))
                 # Evaluate action with target network
-                target_q = target_q.gather(dim=1, index=th.remainder(action_idx.long(), self.heightmap_resolution*self.heightmap_resolution))
+                action_type_offset = th.mul(th.floor_divide(action_idx.long(), 16*self.pixels_per_rotation), other=self.pixels_per_rotation)
+                target_q = target_q.gather(dim=1, index=action_type_offset + th.remainder(action_idx.long(), self.pixels_per_rotation))
                 # Avoid potential broadcast issue
                 target_q = target_q.reshape(-1, 1)
                 # 1-step TD target
@@ -186,10 +188,11 @@ class PGDQN(OffPolicyAlgorithm):
 
             # Get current Q 
             # forward type, batch_size images, each with one specific rotation 
-            current_q = self.q_net.forward_specific_rotations(replay_data.observations, th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
+            #TODO: if grasp then we need two rotations, as symmetric
+            current_q = self.q_net.forward_specific_rotations(replay_data.observations, th.remainder(th.floor_divide(action_idx.long(), self.pixels_per_rotation), 16))
 
             # Retrieve the q-values for the actions from the replay buffer
-            current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
+            current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.pixels_per_rotation))
 
             new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
             self.replay_buffer.update_sample_surprise_values(new_surprise_values)

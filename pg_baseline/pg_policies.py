@@ -42,6 +42,8 @@ class PGQNetwork(BasePolicy):
         # Initialize network trunks with our version of DenseNet with InstanceNormalization
         self.push_color_trunk = pg_densenet.PGdensenet121()
         self.push_depth_trunk = pg_densenet.PGdensenet121()
+        self.grasp_color_trunk = pg_densenet.PGdensenet121()
+        self.grasp_depth_trunk = pg_densenet.PGdensenet121()
 
         self.num_rotations = 16
 
@@ -56,9 +58,19 @@ class PGQNetwork(BasePolicy):
             # ('push-upsample2', nn.Upsample(scale_factor=4, mode='bilinear'))
         ]))
 
+        self.graspnet = nn.Sequential(OrderedDict([
+            ('grasp-norm0', nn.InstanceNorm2d(2048, affine=True)),
+            ('grasp-relu0', nn.ReLU(inplace=True)),
+            ('grasp-conv0', nn.Conv2d(2048, 64, kernel_size=1, stride=1, bias=False)),
+            ('grasp-norm1', nn.InstanceNorm2d(64, affine=True)),
+            ('grasp-relu1', nn.ReLU(inplace=True)),
+            ('grasp-conv1', nn.Conv2d(64, 1, kernel_size=1, stride=1, bias=False))
+            # ('grasp-upsample2', nn.Upsample(scale_factor=4, mode='bilinear'))
+        ]))
+
         # Initialize network weights
         for m in self.named_modules():
-            if 'push-' in m[0]:
+            if 'push-' in m[0] or 'grasp-' in m[0]:
                 if isinstance(m[1], nn.Conv2d):
                     nn.init.kaiming_normal_(m[1].weight.data)
                 elif isinstance(m[1], nn.InstanceNorm2d):
@@ -86,7 +98,7 @@ class PGQNetwork(BasePolicy):
          # Pass input data through model
         output_prob = self._forward(input_color_data, input_depth_data)
 
-        return th.reshape(output_prob, (batch_size, self.num_rotations*self.heightmap_resolution*self.heightmap_resolution))
+        return th.reshape(output_prob, (batch_size, 2*self.num_rotations*self.heightmap_resolution*self.heightmap_resolution))
         
     def forward_specific_rotations(self, obs: th.Tensor, rotation_indices: th.Tensor):
         assert obs.shape[0] == rotation_indices.shape[0], "Number of observations does not match number of rotation indices"
@@ -97,7 +109,7 @@ class PGQNetwork(BasePolicy):
 
         output_prob = self._forward(input_color_data, input_depth_data, rotation_indices=rotation_indices)
 
-        return th.reshape(output_prob, (batch_size, self.heightmap_resolution*self.heightmap_resolution))
+        return th.reshape(output_prob, (batch_size, 2*self.heightmap_resolution*self.heightmap_resolution))
 
 
     def _forward(self, input_color_data, input_depth_data, rotation_indices=None):
@@ -135,8 +147,13 @@ class PGQNetwork(BasePolicy):
         interm_push_depth_feat = self.push_depth_trunk.features(rotated_depth_images)
         interm_push_feat = th.cat((interm_push_color_feat, interm_push_depth_feat), dim=1)
 
+        interm_grasp_color_feat = self.grasp_color_trunk.features(rotated_color_images)
+        interm_grasp_depth_feat = self.grasp_depth_trunk.features(rotated_depth_images)
+        interm_grasp_feat = th.cat((interm_grasp_color_feat, interm_grasp_depth_feat), dim=1)
+
         # Forward pass through branches, undo rotation on output predictions, upsample results
-        output_prob = nn.Upsample(scale_factor=16, mode='bilinear', align_corners=True).forward(F.grid_sample(self.pushnet(interm_push_feat), batch_flow_grid_after, mode='nearest'))
+        output_prob = th.cat((nn.Upsample(scale_factor=16, mode='bilinear', align_corners=True).forward(F.grid_sample(self.pushnet(interm_push_feat), batch_flow_grid_after, mode='nearest')),
+                            nn.Upsample(scale_factor=16, mode='bilinear', align_corners=True).forward(F.grid_sample(self.graspnet(interm_grasp_feat), batch_flow_grid_after, mode='nearest'))), dim=0)
 
         output_prob = th.narrow(output_prob, dim=2, start=int(self.padding_width/2), length=self.heightmap_resolution)
         output_prob = th.narrow(output_prob, dim=3, start=int(self.padding_width/2), length=self.heightmap_resolution)
