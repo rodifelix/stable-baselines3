@@ -201,11 +201,12 @@ class PGDQN(OffPolicyAlgorithm):
             self.replay_buffer.update_sample_surprise_values(new_surprise_values)
             
             if th.any(grasp_mask):
-                grasp_observations = th.masked_select(replay_data.observations, mask=grasp_mask)
-                grasp_actions = th.masked_select(replay_data.actions, mask=grasp_mask)
-                grasp_targets = th.masked_select(target_q, mask=grasp_mask)
+                grasp_indices = th.nonzero(grasp_mask, as_tuple=True)[0]
+                grasp_observations = replay_data.observations[grasp_indices]
+                grasp_actions = replay_data.actions[grasp_indices]
+                grasp_targets = target_q[grasp_indices]
 
-                grasp_current_q_opposite = self.q_net.forward_specific_rotations(grasp_observations, th.remainder(th.floor_divide(grasp_actions+8, self.pixels_per_rotation), 16))
+                grasp_current_q_opposite = self.q_net.forward_specific_rotations(grasp_observations, th.remainder(th.floor_divide(grasp_actions, self.pixels_per_rotation)+8, 16))
                 grasp_current_q_opposite = th.gather(grasp_current_q_opposite, dim=1, index=self.pixels_per_rotation + th.remainder(grasp_actions.long(), self.pixels_per_rotation))
 
                 current_q = th.cat((current_q, grasp_current_q_opposite))
