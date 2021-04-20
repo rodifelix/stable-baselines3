@@ -93,11 +93,16 @@ class PGBuffer(ReplayBuffer):
             most_recent_element_idx = upper_bound - 1 if self.pos == 0 else self.pos-1
             assert batch_size > 0, "Error: Nothing in buffer to sample or batch_size set to 0" 
             if batch_size > 1:                
-                sorted_surprise_ind = np.argsort(self.surprise[:upper_bound,0])
+                sorted_surprise_ind = np.argsort(self.surprise[:upper_bound,0]).astype(int)
                 #skip element most recent element at self.pos-1, as this will always be selected
                 sorted_surprise_ind = sorted_surprise_ind[sorted_surprise_ind != most_recent_element_idx]
-                rand_sample_ind = np.round(np.random.power(2, batch_size-1)*(sorted_surprise_ind.size-1)).astype(int)
-                self.save_indices = sorted_surprise_ind[rand_sample_ind]
+                for i in range(batch_size-1):
+                    rand_sample_ind = np.round(np.random.power(2, 1)*(sorted_surprise_ind.size-1)).astype(int)
+                    if i == 0:
+                        self.save_indices = sorted_surprise_ind[rand_sample_ind]
+                    else:
+                        self.save_indices = np.append(self.save_indices, sorted_surprise_ind[rand_sample_ind])
+                    sorted_surprise_ind = np.delete(sorted_surprise_ind, rand_sample_ind)
 
                 # Always sample the most recent entry to generate surprise value
                 self.save_indices = np.append(self.save_indices, [most_recent_element_idx])
