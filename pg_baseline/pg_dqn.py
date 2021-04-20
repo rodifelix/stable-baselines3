@@ -189,7 +189,7 @@ class PGDQN(OffPolicyAlgorithm):
             # Get current Q 
             # forward type, batch_size images, each with one specific rotation 
             #TODO: if grasp then we need two rotations, as symmetric
-            current_q = self.q_net.forward_specific_rotations(replay_data.observations, th.remainder(th.floor_divide(action_idx.long(), self.pixels_per_rotation), 16))
+            current_q = self.q_net.forward_specific_rotations(replay_data.observations, th.remainder(th.floor_divide(replay_data.actions.long(), self.pixels_per_rotation), 16))
 
             # Retrieve the q-values for the actions from the replay buffer
             current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.pixels_per_rotation))
