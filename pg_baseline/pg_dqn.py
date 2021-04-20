@@ -176,26 +176,40 @@ class PGDQN(OffPolicyAlgorithm):
                 # Select best estimated next action
                 _, action_idx = self.q_net.forward(replay_data.next_observations).max(dim=1)
                 action_idx = action_idx.unsqueeze(0).T
+                next_grasp_mask = action_idx >= 16 * self.pixels_per_rotation
                 # Compute the target Q values
                 target_q = self.q_net_target.forward_specific_rotations(replay_data.next_observations, th.remainder(th.floor_divide(action_idx.long(), self.pixels_per_rotation), 16))
                 # Evaluate action with target network
-                action_type_offset = th.mul(th.floor_divide(action_idx.long(), 16*self.pixels_per_rotation), other=self.pixels_per_rotation)
-                target_q = target_q.gather(dim=1, index=action_type_offset + th.remainder(action_idx.long(), self.pixels_per_rotation))
+                next_action_type_offset = th.mul(next_grasp_mask.int(), other=self.pixels_per_rotation)
+                target_q = target_q.gather(dim=1, index=next_action_type_offset + th.remainder(action_idx.long(), self.pixels_per_rotation))
                 # Avoid potential broadcast issue
                 target_q = target_q.reshape(-1, 1)
                 # 1-step TD target
                 target_q = replay_data.rewards + (1 - replay_data.dones) * self.gamma * target_q
 
+
+            grasp_mask = replay_data.actions >= 16 * self.pixels_per_rotation
             # Get current Q 
-            # forward type, batch_size images, each with one specific rotation 
-            #TODO: if grasp then we need two rotations, as symmetric
+            # forward type, batch_size images, each with one specific rotation
             current_q = self.q_net.forward_specific_rotations(replay_data.observations, th.remainder(th.floor_divide(replay_data.actions.long(), self.pixels_per_rotation), 16))
 
             # Retrieve the q-values for the actions from the replay buffer
-            current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.pixels_per_rotation))
-
+            action_type_offset = th.mul(grasp_mask.int(), other=self.pixels_per_rotation)
+            current_q = th.gather(current_q, dim=1, index=action_type_offset + th.remainder(replay_data.actions.long(), self.pixels_per_rotation))
+            
             new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
             self.replay_buffer.update_sample_surprise_values(new_surprise_values)
+            
+            if th.any(grasp_mask):
+                grasp_observations = th.masked_select(replay_data.observations, mask=grasp_mask)
+                grasp_actions = th.masked_select(replay_data.actions, mask=grasp_mask)
+                grasp_targets = th.masked_select(target_q, mask=grasp_mask)
+
+                grasp_current_q_opposite = self.q_net.forward_specific_rotations(grasp_observations, th.remainder(th.floor_divide(grasp_actions+8, self.pixels_per_rotation), 16))
+                grasp_current_q_opposite = th.gather(grasp_current_q_opposite, dim=1, index=self.pixels_per_rotation + th.remainder(grasp_actions.long(), self.pixels_per_rotation))
+
+                current_q = th.cat((current_q, grasp_current_q_opposite))
+                target_q = th.cat((target_q, grasp_targets))
 
             # Compute Huber loss (less sensitive to outliers)
             loss = F.smooth_l1_loss(current_q, target_q)
