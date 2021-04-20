@@ -204,10 +204,16 @@ class PGQNetwork(BasePolicy):
         return flow_grids_before, flow_grids_after
 
 
-    def _predict(self, observation: th.Tensor, deterministic: bool = True) -> th.Tensor:
+    def _predict(self, observation: th.Tensor, deterministic: bool = True) -> th.Tensor:        
         q_values = self.forward(observation)
-        # Greedy action
-        action = q_values.argmax(dim=1).reshape(-1)
+        if deterministic:
+            # Greedy action
+            action = q_values.argmax(dim=1).reshape(-1)
+        else:
+            # push: 0, grasp: 1
+            action_type = np.random.randint(0,2)
+            q_value_slice = th.narrow(q_values, dim=1, start=action_type*16*200*200, length=16*200*200)
+            action = q_value_slice.argmax(dim=1).reshape(-1) + action_type*16*200*200
         return action
 
     def _get_data(self) -> Dict[str, Any]:
