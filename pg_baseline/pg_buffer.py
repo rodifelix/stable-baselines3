@@ -90,7 +90,7 @@ class PGBuffer(ReplayBuffer):
         if not self.optimize_memory_usage:
             upper_bound = self.buffer_size if self.full else self.pos
             batch_size = min(upper_bound, batch_size)
-            most_recent_element_idx = upper_bound - 1 if self.pos == 0 else self.pos-1
+            most_recent_element_idx = self.buffer_size - 1 if self.pos == 0 else self.pos-1
             assert batch_size > 0, "Error: Nothing in buffer to sample or batch_size set to 0" 
             if batch_size > 1:                
                 sorted_surprise_ind = np.argsort(self.surprise[:upper_bound,0]).astype(int)
