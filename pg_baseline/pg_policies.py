@@ -32,6 +32,7 @@ class PGQNetwork(BasePolicy):
         super(PGQNetwork, self).__init__(
             observation_space,
             action_space,
+            normalize_images=False,
         )
 
         #TODO: assert observation space and action space specification is compatible with heightmap resolution
