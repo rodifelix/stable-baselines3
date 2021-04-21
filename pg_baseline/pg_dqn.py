@@ -114,7 +114,7 @@ class PGDQN(OffPolicyAlgorithm):
         self.target_update_interval = target_update_interval
         self.max_grad_norm = max_grad_norm
         # "epsilon" for the epsilon-greedy exploration
-        self.exploration_rate = 0.0
+        self.exploration_rate = exploration_initial_eps
         # Linear schedule will be defined in `_setup_model()`
         self.exploration_schedule = None
         self.q_net, self.q_net_target = None, None
