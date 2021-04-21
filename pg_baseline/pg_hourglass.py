@@ -217,8 +217,7 @@ class Push_Into_Box_Net(nn.Module):
 
         self.back = [nn.ReplicationPad2d(3),
                      nn.Conv2d(self.params['hg_across_channels'], self.params['output_channels'], kernel_size=7, stride=1),
-                     nn.BatchNorm2d(self.params['output_channels']),
-                     nn.ReLU()]
+                     nn.BatchNorm2d(self.params['output_channels'])]
         
         self.front = nn.Sequential(*self.front)
         
