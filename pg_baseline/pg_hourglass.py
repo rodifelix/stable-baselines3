@@ -271,6 +271,6 @@ def get_pibn_parameters():
         # how many hourglass modules
         'n_stages': 1,
         # channels of the image
-        'input_channels': 1,
+        'input_channels': 4,
         # output channels
         'output_channels': 16}
