@@ -282,3 +282,47 @@ class PGDQN(OffPolicyAlgorithm):
         state_dicts = ["policy", "policy.optimizer"]
 
         return state_dicts, []
+
+    def backward(self, obs, next_obs, action, reward, done):
+        with th.no_grad():
+            # Select best estimated next action
+            _, action_idx = self.q_net.forward(next_obs).max(dim=1)
+            action_idx = action_idx.unsqueeze(0).T
+            next_grasp_mask = action_idx >= 16 * self.pixels_per_rotation
+            # Compute the target Q values
+            target_q = self.q_net_target.forward_specific_rotations(next_obs, th.remainder(th.floor_divide(action_idx.long(), self.pixels_per_rotation), 16))
+            # Evaluate action with target network
+            next_action_type_offset = th.mul(next_grasp_mask.int(), other=self.pixels_per_rotation)
+            target_q = target_q.gather(dim=1, index=next_action_type_offset + th.remainder(action_idx.long(), self.pixels_per_rotation))
+            # Avoid potential broadcast issue
+            target_q = target_q.reshape(-1, 1)
+            # 1-step TD target
+            target_q = reward + (1 - done) * self.gamma * target_q
+
+
+        action_is_grasp = action >= 16 * self.pixels_per_rotation
+        # Get current Q 
+        # forward type, batch_size images, each with one specific rotation
+        current_q = self.q_net.forward_specific_rotations(obs, th.remainder(th.floor_divide(action, self.pixels_per_rotation), 16))
+
+        # Retrieve the q-values for the actions from the replay buffer
+        action_type_offset = self.pixels_per_rotation if action_is_grasp else 0
+        current_q = th.gather(current_q, dim=1, index=action_type_offset + th.remainder(action, self.pixels_per_rotation))
+        
+        if action_is_grasp:
+            grasp_current_q_opposite = self.q_net.forward_specific_rotations(obs, th.remainder(th.floor_divide(action, self.pixels_per_rotation)+8, 16))
+            grasp_current_q_opposite = th.gather(grasp_current_q_opposite, dim=1, index=self.pixels_per_rotation + th.remainder(action, self.pixels_per_rotation))
+
+            current_q = th.cat((current_q, grasp_current_q_opposite))
+            target_q = th.cat((target_q, target_q))
+
+        # Compute Huber loss (less sensitive to outliers)
+        loss = F.smooth_l1_loss(current_q, target_q)
+
+        # Optimize the policy
+        self.policy.optimizer.zero_grad()
+        loss.backward()
+        # Clip gradient norm
+        th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
+        self.policy.optimizer.step()
+
