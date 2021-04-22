@@ -280,6 +280,7 @@ class PGDQN(OffPolicyAlgorithm):
             # 1-step TD target
             target_q = reward + (1 - done) * self.gamma * target_q
 
+        action = action.unsqueeze(0)
         # Get current Q 
         # forward type, batch_size images, each with one specific rotation 
         current_q = self.q_net.forward(obs)
