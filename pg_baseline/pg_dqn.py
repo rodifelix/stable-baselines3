@@ -265,3 +265,35 @@ class PGDQN(OffPolicyAlgorithm):
         state_dicts = ["policy", "policy.optimizer"]
 
         return state_dicts, []
+
+    def backward(self, obs, next_obs, action, reward, done):
+        with th.no_grad():
+            # Select best estimated next action
+            _, action_idx = self.q_net.forward(next_obs).max(dim=1)
+            action_idx = action_idx.unsqueeze(0).T
+            # Compute the target Q values
+            target_q = self.q_net_target.forward(next_obs)
+            # Evaluate action with target network
+            target_q = target_q.gather(dim=1, index=action_idx.long())
+            # Avoid potential broadcast issue
+            target_q = target_q.reshape(-1, 1)
+            # 1-step TD target
+            target_q = reward + (1 - done) * self.gamma * target_q
+
+        # Get current Q 
+        # forward type, batch_size images, each with one specific rotation 
+        current_q = self.q_net.forward(obs)
+
+        # Retrieve the q-values for the actions from the replay buffer
+        current_q = th.gather(current_q, dim=1, index=action)
+
+        # Compute Huber loss (less sensitive to outliers)
+        loss = F.smooth_l1_loss(current_q, target_q)
+
+        # Optimize the policy
+        self.policy.optimizer.zero_grad()
+        loss.backward()
+        # Clip gradient norm
+        th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
+        self.policy.optimizer.step()
+
