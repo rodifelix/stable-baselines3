@@ -299,14 +299,14 @@ class PGDQN(OffPolicyAlgorithm):
             # 1-step TD target
             target_q = reward + (1 - done) * self.gamma * target_q
 
-
+        action = action.unsqueeze(0)
         action_is_grasp = action >= 16 * self.pixels_per_rotation
         # Get current Q 
         # forward type, batch_size images, each with one specific rotation
         current_q = self.q_net.forward_specific_rotations(obs, th.remainder(th.floor_divide(action, self.pixels_per_rotation), 16))
 
         # Retrieve the q-values for the actions from the replay buffer
-        action_type_offset = self.pixels_per_rotation if action_is_grasp else 0
+        action_type_offset = th.mul(action_is_grasp.int(), other=self.pixels_per_rotation)
         current_q = th.gather(current_q, dim=1, index=action_type_offset + th.remainder(action, self.pixels_per_rotation))
         
         if action_is_grasp:
