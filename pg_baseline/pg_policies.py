@@ -49,7 +49,7 @@ class PGQNetwork(BasePolicy):
         """
         batch_size = obs.shape[0]
 
-        output_prob = self.net.forward(obs)
+        output_prob = self.net.forward(obs.to(self.device))
 
         return th.reshape(output_prob, (batch_size, self.num_rotations*self.heightmap_resolution*self.heightmap_resolution))
 
