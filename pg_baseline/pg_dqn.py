@@ -284,6 +284,7 @@ class PGDQN(OffPolicyAlgorithm):
         return state_dicts, []
 
     def backward(self, obs, next_obs, action, reward, done):
+        obs = obs.to(self.device)
         with th.no_grad():
             # Select best estimated next action
             _, action_idx = self.q_net.forward(next_obs).max(dim=1)
