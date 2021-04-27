@@ -33,7 +33,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# body: input --> 1x1 Conv2d --> BatchNorm2d --> ReLU --> 3x3 Conv2d --> BatchNorm2d --> ReLU --> 1x1 Conv2d --> BatchNorm2d --> output
+# body: input --> 1x1 Conv2d --> InstanceNorm2d --> ReLU --> 3x3 Conv2d --> InstanceNorm2d --> ReLU --> 1x1 Conv2d --> InstanceNorm2d --> output
 # shortcut: input --> 1x1 Conv2d --> output
 # The ResidualBlock is illustrated in Fig. 4 (left) of the paper "Stacked Hourglass Networks for Human Pose Estimation" by Newell et al.
 class ResidualBlock(nn.Module):
@@ -47,19 +47,19 @@ class ResidualBlock(nn.Module):
 
         layers=[nn.ReplicationPad2d(0),
           nn.Conv2d(input_channels, self.mid_channels, kernel_size=1, stride=1),
-          nn.BatchNorm2d(self.mid_channels),
+          nn.InstanceNorm2d(self.mid_channels, affine=True),
           nn.ReLU(inplace=True),
 
           nn.ReplicationPad2d(1),
           nn.Conv2d(self.mid_channels, self.mid_channels, kernel_size=3, stride=1),
-          nn.BatchNorm2d(self.mid_channels),
+          nn.InstanceNorm2d(self.mid_channels, affine=True),
           nn.ReLU(inplace=True),
 
           nn.ReplicationPad2d(0),
           nn.Conv2d(self.mid_channels, output_channels, kernel_size=1, stride=1),
-          nn.BatchNorm2d(output_channels)]
+          nn.InstanceNorm2d(output_channels, affine=True)]
 
-        self.bn= nn.BatchNorm2d(output_channels)
+        self.bn= nn.InstanceNorm2d(output_channels, affine=True)
         self.relu= nn.ReLU(inplace=True)
 
         self.body=nn.Sequential(*layers)  # the asterisk takes the elements inside of layers out of brackets.
@@ -208,7 +208,7 @@ class Push_Into_Box_Net(nn.Module):
         # hg_input_channels = 128
         self.front = [nn.ReplicationPad2d(3),
                      nn.Conv2d(self.params['input_channels'], self.params['front_channels'], kernel_size=7, stride=1),
-                     nn.BatchNorm2d(self.params['front_channels']),
+                     nn.InstanceNorm2d(self.params['front_channels'], affine=True),
                      nn.ReLU(inplace=True),
 #                      nn.MaxPool2d(kernel_size=2, stride=2),
                      self.residual_block(self.params['front_channels'], self.params['front_channels']),
@@ -217,7 +217,7 @@ class Push_Into_Box_Net(nn.Module):
 
         self.back = [nn.ReplicationPad2d(3),
                      nn.Conv2d(self.params['hg_across_channels'], self.params['output_channels'], kernel_size=7, stride=1),
-                     nn.BatchNorm2d(self.params['output_channels'])]
+                     nn.InstanceNorm2d(self.params['output_channels'], affine=True)]
         
         self.front = nn.Sequential(*self.front)
         
