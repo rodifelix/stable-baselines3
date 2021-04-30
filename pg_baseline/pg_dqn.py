@@ -193,7 +193,7 @@ class PGDQN(OffPolicyAlgorithm):
             self.replay_buffer.update_sample_surprise_values(new_surprise_values)
 
             # Compute Huber loss (less sensitive to outliers)
-            loss = F.smooth_l1_loss(current_q, target_q)
+            loss = F.mse_loss(current_q, target_q)
             losses.append(loss.item())
 
             # Optimize the policy
