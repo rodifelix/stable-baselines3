@@ -170,17 +170,20 @@ class PGDQN(OffPolicyAlgorithm):
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
 
             with th.no_grad():
-                # Select best estimated next action
-                _, action_idx = self.q_net.forward(replay_data.next_observations).max(dim=1)
-                action_idx = action_idx.unsqueeze(0).T
-                # Compute the target Q values
-                target_q = self.q_net_target.forward(replay_data.next_observations)
-                # Evaluate action with target network
-                target_q = target_q.gather(dim=1, index=action_idx.long())
-                # Avoid potential broadcast issue
-                target_q = target_q.reshape(-1, 1)
-                # 1-step TD target
-                target_q = replay_data.rewards + (1 - replay_data.dones) * self.gamma * target_q
+                if self.gamma > 0:
+                    # Select best estimated next action
+                    _, action_idx = self.q_net.forward(replay_data.next_observations).max(dim=1)
+                    action_idx = action_idx.unsqueeze(0).T
+                    # Compute the target Q values
+                    target_q = self.q_net_target.forward(replay_data.next_observations)
+                    # Evaluate action with target network
+                    target_q = target_q.gather(dim=1, index=action_idx.long())
+                    # Avoid potential broadcast issue
+                    target_q = target_q.reshape(-1, 1)
+                    # 1-step TD target
+                    target_q = replay_data.rewards + (1 - replay_data.dones) * self.gamma * target_q
+                else:
+                    target_q = replay_data.rewards
 
             # Get current Q 
             # forward type, batch_size images, each with one specific rotation 
@@ -268,17 +271,20 @@ class PGDQN(OffPolicyAlgorithm):
 
     def backward(self, obs, next_obs, action, reward, done):
         with th.no_grad():
-            # Select best estimated next action
-            _, action_idx = self.q_net.forward(next_obs).max(dim=1)
-            action_idx = action_idx.unsqueeze(0).T
-            # Compute the target Q values
-            target_q = self.q_net_target.forward(next_obs)
-            # Evaluate action with target network
-            target_q = target_q.gather(dim=1, index=action_idx.long())
-            # Avoid potential broadcast issue
-            target_q = target_q.reshape(-1, 1)
-            # 1-step TD target
-            target_q = reward + (1 - done) * self.gamma * target_q
+            if self.gamma > 0:
+                # Select best estimated next action
+                _, action_idx = self.q_net.forward(next_obs).max(dim=1)
+                action_idx = action_idx.unsqueeze(0).T
+                # Compute the target Q values
+                target_q = self.q_net_target.forward(next_obs)
+                # Evaluate action with target network
+                target_q = target_q.gather(dim=1, index=action_idx.long())
+                # Avoid potential broadcast issue
+                target_q = target_q.reshape(-1, 1)
+                # 1-step TD target
+                target_q = reward + (1 - done) * self.gamma * target_q
+            else:
+                target_q = th.Tensor([[reward]])
 
         action = action.unsqueeze(0)
         # Get current Q 
@@ -289,7 +295,7 @@ class PGDQN(OffPolicyAlgorithm):
         current_q = th.gather(current_q, dim=1, index=action)
 
         # Compute Huber loss (less sensitive to outliers)
-        loss = F.smooth_l1_loss(current_q, target_q)
+        loss = F.mse_loss(current_q, target_q)
 
         # Optimize the policy
         self.policy.optimizer.zero_grad()
