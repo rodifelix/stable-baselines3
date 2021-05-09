@@ -60,7 +60,7 @@ class PGQNetwork(BasePolicy):
             action = q_values.argmax(dim=1).reshape(-1)
         else:
             q_values = q_values.reshape(self.num_rotations, self.heightmap_resolution*self.heightmap_resolution)
-            rand_rotation = np.random.randint(0,17)
+            rand_rotation = np.random.randint(0,self.num_rotations)
             q_value_slice = th.narrow(q_values, dim=0, start=rand_rotation, length=1)
             action = q_value_slice.argmax(dim=1).reshape(-1) + rand_rotation*self.heightmap_resolution*self.heightmap_resolution
         return action
