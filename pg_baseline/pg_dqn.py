@@ -229,11 +229,8 @@ class PGDQN(OffPolicyAlgorithm):
         :return: the model's action and the next state
             (used in recurrent policies)
         """
-        if not deterministic and np.random.rand() < self.exploration_rate:
-            n_batch = observation.shape[0]
-            action = np.array([self.action_space.sample() for _ in range(n_batch)])
-        else:
-            action, state = self.policy.predict(observation, state, mask, deterministic)
+        explore = np.random.rand() < self.exploration_rate
+        action, state = self.policy.predict(observation, state, mask, not explore)
         return action, state
 
     def learn(

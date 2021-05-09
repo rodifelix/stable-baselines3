@@ -53,10 +53,16 @@ class PGQNetwork(BasePolicy):
 
         return th.reshape(output_prob, (batch_size, self.num_rotations*self.heightmap_resolution*self.heightmap_resolution))
 
-    def _predict(self, observation: th.Tensor, deterministic: bool = True) -> th.Tensor:
+    def _predict(self, observation: th.Tensor, deterministic: bool = True) -> th.Tensor:        
         q_values = self.forward(observation)
-        # Greedy action
-        action = q_values.argmax(dim=1).reshape(-1)
+        if deterministic:
+            # Greedy action
+            action = q_values.argmax(dim=1).reshape(-1)
+        else:
+            q_values = q_values.reshape(self.num_rotations, self.heightmap_resolution*self.heightmap_resolution)
+            rand_rotation = np.random.randint(0,17)
+            q_value_slice = th.narrow(q_values, dim=0, start=rand_rotation, length=1)
+            action = q_value_slice.argmax(dim=1).reshape(-1) + rand_rotation*self.heightmap_resolution*self.heightmap_resolution
         return action
 
     def _get_data(self) -> Dict[str, Any]:
