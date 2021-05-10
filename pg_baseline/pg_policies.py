@@ -37,9 +37,14 @@ class PGQNetwork(BasePolicy):
 
         self.heightmap_resolution = heightmap_resolution
 
-        self.net = pg_hourglass.Push_Into_Box_Net(pg_hourglass.get_pibn_parameters())
+        self.num_rotations = 8
 
-        self.num_rotations = 16
+        params = pg_hourglass.get_pibn_parameters()
+
+        params['output_channels'] = self.num_rotations
+
+        self.net = pg_hourglass.Push_Into_Box_Net(params)
+
 
     def forward(self, obs: th.Tensor) -> th.Tensor:
         """
