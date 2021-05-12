@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 import numpy as np
 import torch as th
 from torch.nn import functional as F
+import os
 
 from stable_baselines3.common import logger
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
@@ -206,6 +207,8 @@ class PGDQN(OffPolicyAlgorithm):
             th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
             self.policy.optimizer.step()
 
+            self.train_counter[replay_data.iterations] +=1
+
         # Increase update counter
         self._n_updates += gradient_steps
 
@@ -246,7 +249,9 @@ class PGDQN(OffPolicyAlgorithm):
         reset_num_timesteps: bool = True,
     ) -> OffPolicyAlgorithm:
 
-        return super(PGDQN, self).learn(
+        self.train_counter = np.zeros(total_timesteps, dtype=np.uint16)
+
+        super(PGDQN, self).learn(
             total_timesteps=total_timesteps,
             callback=callback,
             log_interval=log_interval,
@@ -257,6 +262,9 @@ class PGDQN(OffPolicyAlgorithm):
             eval_log_path=eval_log_path,
             reset_num_timesteps=reset_num_timesteps,
         )
+
+        np.savetxt(os.path.join(self.tensorboard_log, "training_log.txt"), self.train_counter, fmt='%i')
+        return self
 
     def _excluded_save_params(self) -> List[str]:
         return super(PGDQN, self)._excluded_save_params() + ["q_net", "q_net_target"]

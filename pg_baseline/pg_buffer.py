@@ -1,5 +1,5 @@
 import warnings
-from typing import Dict, Generator, Optional, Union
+from typing import Dict, Generator, Optional, Union, NamedTuple
 
 import numpy as np
 import torch as th
@@ -13,7 +13,14 @@ except ImportError:
 
 from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.vec_env import VecNormalize
-from stable_baselines3.common.type_aliases import ReplayBufferSamples
+
+class PGBufferSamples(NamedTuple):
+    observations: th.Tensor
+    actions: th.Tensor
+    next_observations: th.Tensor
+    dones: th.Tensor
+    rewards: th.Tensor
+    iterations: th.Tensor
 
 
 class PGBuffer(ReplayBuffer):
@@ -60,9 +67,11 @@ class PGBuffer(ReplayBuffer):
         self.dones = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.surprise = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.save_indices = []
+        self.iteration = np.zeros((self.buffer_size, self.n_envs), dtype=np.int32)
+        self.iteration_offset = 0
 
         if psutil is not None:
-            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes
+            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes
             if self.next_observations is not None:
                 total_memory_usage += self.next_observations.nbytes
 
@@ -75,7 +84,27 @@ class PGBuffer(ReplayBuffer):
                     f"replay buffer {total_memory_usage:.2f}GB > {mem_available:.2f}GB"
                 )
 
-    def sample(self, batch_size: int, env: Optional[VecNormalize] = None) -> ReplayBufferSamples:
+    def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, done: np.ndarray) -> None:
+        # Copy to avoid modification by reference
+        self.observations[self.pos] = np.array(obs).copy()
+        if self.optimize_memory_usage:
+            self.observations[(self.pos + 1) % self.buffer_size] = np.array(next_obs).copy()
+        else:
+            self.next_observations[self.pos] = np.array(next_obs).copy()
+
+        self.actions[self.pos] = np.array(action).copy()
+        self.rewards[self.pos] = np.array(reward).copy()
+        self.dones[self.pos] = np.array(done).copy()
+        self.iteration[self.pos] = [self.iteration_offset*self.buffer_size + self.pos]
+
+        self.pos += 1
+        if self.pos == self.buffer_size:
+            self.full = True
+            self.pos = 0
+            self.iteration_offset += 1
+
+
+    def sample(self, batch_size: int, env: Optional[VecNormalize] = None) -> PGBufferSamples:
         """
         Sample elements from the replay buffer.
         Custom sampling when using memory efficient variant,
@@ -118,6 +147,22 @@ class PGBuffer(ReplayBuffer):
         else:
             batch_inds = np.random.randint(0, self.pos, size=batch_size)
         return self._get_samples(batch_inds, env=env)"""
+
+    def _get_samples(self, batch_inds: np.ndarray, env: Optional[VecNormalize] = None) -> PGBufferSamples:
+        if self.optimize_memory_usage:
+            next_obs = self._normalize_obs(self.observations[(batch_inds + 1) % self.buffer_size, 0, :], env)
+        else:
+            next_obs = self._normalize_obs(self.next_observations[batch_inds, 0, :], env)
+
+        data = (
+            self._normalize_obs(self.observations[batch_inds, 0, :], env),
+            self.actions[batch_inds, 0, :],
+            next_obs,
+            self.dones[batch_inds],
+            self._normalize_reward(self.rewards[batch_inds], env),
+            self.iteration[batch_inds]
+        )
+        return PGBufferSamples(*tuple(map(self.to_torch, data)))
 
     def update_sample_surprise_values(self, new_values: np.ndarray):
         assert len(new_values) == len(self.save_indices), "Amount of saved indices and provided amount of new values not the same"
