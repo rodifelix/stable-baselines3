@@ -145,7 +145,7 @@ class PGDQN(OffPolicyAlgorithm):
             self.exploration_initial_eps, self.exploration_final_eps, self.exploration_fraction
         )
         self.gamma_schedule = get_linear_fn(
-            start=0, end=0.8, fraction=0.75
+            start=0, end=0.8, end_fraction=0.75
         )
 
     def _create_aliases(self) -> None:
