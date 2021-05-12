@@ -207,7 +207,7 @@ class PGDQN(OffPolicyAlgorithm):
             th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
             self.policy.optimizer.step()
 
-            self.train_counter[replay_data.iterations] +=1
+            self.train_counter[replay_data.iterations.cpu()] +=1
 
         # Increase update counter
         self._n_updates += gradient_steps
