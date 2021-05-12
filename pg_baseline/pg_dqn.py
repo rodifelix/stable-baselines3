@@ -88,7 +88,7 @@ class PGDQN(OffPolicyAlgorithm):
         super(PGDQN, self).__init__(
             policy,
             env,
-            PGDQNPolicy, #TODO: <- is this correct?
+            PGDQNPolicy,
             learning_rate,
             buffer_size,
             learning_starts,
@@ -144,6 +144,9 @@ class PGDQN(OffPolicyAlgorithm):
         self.exploration_schedule = get_linear_fn(
             self.exploration_initial_eps, self.exploration_final_eps, self.exploration_fraction
         )
+        self.gamma_schedule = get_linear_fn(
+            start=0, end=0.8, fraction=0.75
+        )
 
     def _create_aliases(self) -> None:
         self.q_net = self.policy.q_net
@@ -155,8 +158,8 @@ class PGDQN(OffPolicyAlgorithm):
         This method is called in ``collect_rollout()`` after each step in the environment.
         """
         if self.num_timesteps % self.target_update_interval == 0:
-            #TODO: Assert this .parameters() call works
             polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
+            self.gamma = self.gamma_schedule(self._current_progress_remaining)
 
         self.exploration_rate = self.exploration_schedule(self._current_progress_remaining)
         logger.record("rollout/exploration rate", self.exploration_rate)
