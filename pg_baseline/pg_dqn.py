@@ -218,6 +218,7 @@ class PGDQN(OffPolicyAlgorithm):
             th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
             self.policy.optimizer.step()
 
+            self.train_counter[replay_data.iterations.cpu()] +=1
 
         # Increase update counter
         self._n_updates += gradient_steps
@@ -258,7 +259,10 @@ class PGDQN(OffPolicyAlgorithm):
         eval_log_path: Optional[str] = None,
         reset_num_timesteps: bool = True,
     ) -> OffPolicyAlgorithm:
-        return super(PGDQN, self).learn(
+
+        self.train_counter = np.zeros(total_timesteps, dtype=np.uint16)
+
+        super(PGDQN, self).learn(
             total_timesteps=total_timesteps,
             callback=callback,
             log_interval=log_interval,
@@ -269,6 +273,9 @@ class PGDQN(OffPolicyAlgorithm):
             eval_log_path=eval_log_path,
             reset_num_timesteps=reset_num_timesteps,
         )
+
+        np.savetxt(os.path.join(self.tensorboard_log, "training_log.txt"), self.train_counter, fmt='%i')
+        return self
 
     def _excluded_save_params(self) -> List[str]:
         return super(PGDQN, self)._excluded_save_params() + ["q_net", "q_net_target"]
