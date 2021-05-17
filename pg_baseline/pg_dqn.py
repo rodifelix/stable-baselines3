@@ -274,7 +274,7 @@ class PGDQN(OffPolicyAlgorithm):
             reset_num_timesteps=reset_num_timesteps,
         )
 
-        np.savetxt(os.path.join(self.tensorboard_log, "training_log.txt"), self.train_counter, fmt='%i')
+        np.savetxt(os.path.join(self.tensorboard_log, '..', "training_log.txt"), self.train_counter, fmt='%i')
         return self
 
     def _excluded_save_params(self) -> List[str]:
