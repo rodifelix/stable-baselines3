@@ -159,6 +159,15 @@ class PGDQN(OffPolicyAlgorithm):
         if self.num_timesteps % self.target_update_interval == 0:
             polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
 
+        if self.num_timesteps == 1:
+            self.save(os.path.join(self.tensorboard_log, '..', "pqn_start.zip"))
+
+        if self.num_timesteps == self.target_update_interval:
+            self.save(os.path.join(self.tensorboard_log, '..', "pqn_first_update.zip"))
+
+        if self.num_timesteps == self.target_update_interval*2:
+            self.save(os.path.join(self.tensorboard_log, '..', "pqn_second_update.zip"))
+
         if self.num_timesteps == self._total_timesteps/4:
             self.save(os.path.join(self.tensorboard_log, '..', "pqn_quarter.zip"))
 
