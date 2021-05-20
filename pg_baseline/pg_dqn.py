@@ -146,9 +146,6 @@ class PGDQN(OffPolicyAlgorithm):
         self.exploration_schedule = get_linear_fn(
             self.exploration_initial_eps, self.exploration_final_eps, self.exploration_fraction
         )
-        self.gamma_schedule = get_linear_fn(
-            start=0, end=0.8, end_fraction=0.75
-        )
 
     def _create_aliases(self) -> None:
         self.q_net = self.policy.q_net
@@ -161,7 +158,6 @@ class PGDQN(OffPolicyAlgorithm):
         """
         if self.num_timesteps % self.target_update_interval == 0:
             polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
-            self.gamma = self.gamma_schedule(self._current_progress_remaining)
 
         if self.num_timesteps == self._total_timesteps/4:
             self.save(os.path.join(self.tensorboard_log, '..', "pqn_quarter.zip"))
