@@ -91,7 +91,7 @@ class PGDQN(OffPolicyAlgorithm):
             PGDQNPolicy,
             learning_rate,
             buffer_size,
-            learning_starts,
+            0, #learning_starts
             batch_size,
             tau,
             gamma,
@@ -119,6 +119,8 @@ class PGDQN(OffPolicyAlgorithm):
         # Linear schedule will be defined in `_setup_model()`
         self.exploration_schedule = None
         self.q_net, self.q_net_target = None, None
+
+        self.trainings_starts = learning_starts
 
         if _init_setup_model:
             self._setup_model()
@@ -186,6 +188,9 @@ class PGDQN(OffPolicyAlgorithm):
 
     def train(self, gradient_steps: int, batch_size: int = 100) -> None:
         # Update learning rate according to schedule
+        if self.num_timesteps < self.trainings_starts:
+            return
+
         self._update_learning_rate(self.policy.optimizer)
 
         losses = []
@@ -217,6 +222,9 @@ class PGDQN(OffPolicyAlgorithm):
             current_q = th.gather(current_q, dim=1, index=replay_data.actions.long())
 
             # Compute Huber loss (less sensitive to outliers)
+            if th.any(current_q < (th.finfo(th.float).min/2)) or th.any(target_q < (th.finfo(th.float).min/2)):
+                print("Backprop over invalid numbers!!!!")
+
             loss = F.mse_loss(current_q, target_q)
             losses.append(loss.item())
 

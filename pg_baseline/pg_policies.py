@@ -56,6 +56,8 @@ class PGQNetwork(BasePolicy):
 
         output_prob = self.net.forward(obs.to(self.device))
 
+        output_prob = self._mask(obs, output_prob)
+
         return th.reshape(output_prob, (batch_size, self.num_rotations*self.heightmap_resolution*self.heightmap_resolution))
 
     def _predict(self, observation: th.Tensor, deterministic: bool = True) -> th.Tensor:        
@@ -80,6 +82,30 @@ class PGQNetwork(BasePolicy):
             )
         )
         return data
+
+    def _mask(self, obs: th.Tensor, output_prob: th.Tensor):
+        threshhold_depth = 0.01
+        depth_mean = 0.0022
+        depth_std = 0.0085
+
+        threshold_norm = (threshhold_depth - depth_mean)/depth_std
+
+        masked_input = obs > threshold_norm
+        masked_input = masked_input.type(th.float)
+        diluted_mask = th.nn.functional.max_pool2d(input=masked_input,kernel_size=(28,28),stride=(1,1),padding=14)
+
+        diluted_mask = th.narrow(diluted_mask, 2, 0, self.heightmap_resolution)
+        diluted_mask = th.narrow(diluted_mask, 3, 0, self.heightmap_resolution)
+
+        diluted_mask = diluted_mask - 1.
+        diluted_mask = diluted_mask * th.finfo(th.float).max
+
+        #diluted_mask = th.nan_to_num(diluted_mask)
+
+        diluted_mask = th.repeat_interleave(diluted_mask, self.num_rotations, dim=1)
+
+        return output_prob + diluted_mask
+
 
 class PGDQNPolicy(BasePolicy):
     """
