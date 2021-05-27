@@ -10,7 +10,6 @@ from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback
 from stable_baselines3.common.utils import get_linear_fn, polyak_update
 from pg_baseline.pg_policies import PGDQNPolicy
-from pg_baseline.pg_buffer import PGBuffer
 
 
 class PGDQN(OffPolicyAlgorithm):
@@ -126,24 +125,7 @@ class PGDQN(OffPolicyAlgorithm):
             self._setup_model()
 
     def _setup_model(self) -> None:
-        self._setup_lr_schedule()
-        self.set_random_seed(self.seed)
-        self.replay_buffer = PGBuffer(
-            self.buffer_size,
-            self.observation_space,
-            self.action_space,
-            self.device,
-            optimize_memory_usage=self.optimize_memory_usage,
-        )
-        self.policy = self.policy_class(
-            self.observation_space,
-            self.action_space,
-            self.lr_schedule,
-            **self.policy_kwargs  # pytype:disable=not-instantiable
-        )
-        self.policy = self.policy.to(self.device)
-
-
+        super(PGDQN, self)._setup_model()
         self._create_aliases()
         self.exploration_schedule = get_linear_fn(
             self.exploration_initial_eps, self.exploration_final_eps, self.exploration_fraction
