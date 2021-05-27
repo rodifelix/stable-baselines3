@@ -96,6 +96,7 @@ class PGBuffer(ReplayBuffer):
         self.rewards[self.pos] = np.array(reward).copy()
         self.dones[self.pos] = np.array(done).copy()
         self.iteration[self.pos] = [self.iteration_offset*self.buffer_size + self.pos]
+        self.surprise[self.pos,0] = 100
 
         self.pos += 1
         if self.pos == self.buffer_size:
