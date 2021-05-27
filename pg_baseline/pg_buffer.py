@@ -66,12 +66,11 @@ class PGBuffer(ReplayBuffer):
         self.rewards = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.dones = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.rotations = np.zeros((self.buffer_size, self.n_envs), dtype=np.int32)
-        self.save_indices = []
         self.iteration = np.zeros((self.buffer_size, self.n_envs), dtype=np.int32)
         self.iteration_offset = 0
 
         if psutil is not None:
-            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.rotation.nbytes + self.iteration.nbytes
+            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.rotations.nbytes + self.iteration.nbytes
             if self.next_observations is not None:
                 total_memory_usage += self.next_observations.nbytes
 
