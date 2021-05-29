@@ -94,7 +94,7 @@ class PGDQN(OffPolicyAlgorithm):
             0, #learning_starts
             batch_size,
             tau,
-            gamma,
+            0, #gamma
             train_freq,
             gradient_steps,
             n_episodes_rollout,
@@ -121,6 +121,7 @@ class PGDQN(OffPolicyAlgorithm):
         self.q_net, self.q_net_target = None, None
 
         self.trainings_starts = learning_starts
+        self.final_gamma = gamma
 
         if _init_setup_model:
             self._setup_model()
@@ -147,7 +148,7 @@ class PGDQN(OffPolicyAlgorithm):
             self.exploration_initial_eps, self.exploration_final_eps, self.exploration_fraction
         )
         self.gamma_schedule = get_linear_fn(
-            start=0, end=0.8, end_fraction=0.75
+            start=0, end=self.final_gamma, end_fraction=0.75
         )
 
     def _create_aliases(self) -> None:
