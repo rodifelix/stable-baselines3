@@ -304,7 +304,7 @@ class PGDQN(OffPolicyAlgorithm):
 
         return state_dicts, []
 
-    def backward(self, obs, next_obs, action, reward, done):
+    def backward(self, obs, next_obs, action, reward, complete):
         with th.no_grad():
             if self.gamma > 0:
                 # Select best estimated next action
@@ -317,7 +317,7 @@ class PGDQN(OffPolicyAlgorithm):
                 # Avoid potential broadcast issue
                 target_q = target_q.reshape(-1, 1)
                 # 1-step TD target
-                target_q = reward + (1 - done) * self.gamma * target_q
+                target_q = reward + (1 - complete) * self.gamma * target_q
             else:
                 target_q = th.Tensor([[reward]])
 
