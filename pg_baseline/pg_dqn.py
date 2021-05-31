@@ -209,7 +209,7 @@ class PGDQN(OffPolicyAlgorithm):
                     # Avoid potential broadcast issue
                     target_q = target_q.reshape(-1, 1)
                     # 1-step TD target
-                    target_q = replay_data.rewards + (1 - replay_data.dones) * self.gamma * target_q
+                    target_q = replay_data.rewards + (1 - replay_data.completes) * self.gamma * target_q
                 else:
                     target_q = replay_data.rewards
 

@@ -19,6 +19,7 @@ class PGBufferSamples(NamedTuple):
     actions: th.Tensor
     next_observations: th.Tensor
     dones: th.Tensor
+    completes: th.Tensor
     rewards: th.Tensor
     iterations: th.Tensor
 
@@ -65,13 +66,14 @@ class PGBuffer(ReplayBuffer):
         self.actions = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=action_space.dtype)
         self.rewards = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.dones = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
+        self.completes = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.surprise = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.save_indices = []
         self.iteration = np.zeros((self.buffer_size, self.n_envs), dtype=np.int32)
         self.iteration_offset = 0
 
         if psutil is not None:
-            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes
+            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.completes.nbytes
             if self.next_observations is not None:
                 total_memory_usage += self.next_observations.nbytes
 
@@ -95,6 +97,7 @@ class PGBuffer(ReplayBuffer):
         self.actions[self.pos] = np.array(action).copy()
         self.rewards[self.pos] = np.array(reward).copy()
         self.dones[self.pos] = np.array(done).copy()
+        self.completes[self.pos] = np.array(reward > 10).copy()
         self.iteration[self.pos] = [self.iteration_offset*self.buffer_size + self.pos]
         self.surprise[self.pos,0] = 100
 
@@ -160,6 +163,7 @@ class PGBuffer(ReplayBuffer):
             self.actions[batch_inds, 0, :],
             next_obs,
             self.dones[batch_inds],
+            self.completes[batch_inds],
             self._normalize_reward(self.rewards[batch_inds], env),
             self.iteration[batch_inds]
         )
