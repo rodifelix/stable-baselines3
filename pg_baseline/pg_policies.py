@@ -85,10 +85,9 @@ class PGQNetwork(BasePolicy):
 
     def _mask(self, obs: th.Tensor, output_prob: th.Tensor):
         threshhold_depth = 0.01
-        depth_mean = 0.0022
-        depth_std = 0.0085
-
-        threshold_norm = (threshhold_depth - depth_mean)/depth_std
+        depth_min = 0.0
+        depth_max = 0.1
+        threshold_norm = (threshhold_depth - depth_min)/(depth_max - depth_min)
 
         masked_input = obs > threshold_norm
         masked_input = masked_input.type(th.float)
