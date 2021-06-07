@@ -61,16 +61,23 @@ class PGQNetwork(BasePolicy):
         return th.reshape(output_prob, (batch_size, self.num_rotations*self.heightmap_resolution*self.heightmap_resolution))
 
     def _predict(self, observation: th.Tensor, deterministic: bool = True) -> th.Tensor:        
-        q_values = self.forward(observation)
         if deterministic:
+            q_values = self.forward(observation)
             # Greedy action
             action = q_values.argmax(dim=1).reshape(-1)
         else:
-            q_values = q_values.reshape(self.num_rotations, self.heightmap_resolution*self.heightmap_resolution)
-            rand_rotation = np.random.randint(0,self.num_rotations)
-            print("Exploring: Random rotation index:", rand_rotation)
-            q_value_slice = th.narrow(q_values, dim=0, start=rand_rotation, length=1)
-            action = q_value_slice.argmax(dim=1).reshape(-1) + rand_rotation*self.heightmap_resolution*self.heightmap_resolution
+            actions = th.arange(start=0, end=self.num_rotations*self.heightmap_resolution*self.heightmap_resolution, dtype=th.long)
+            actions = actions.reshape((1, self.num_rotations, self.heightmap_resolution, self.heightmap_resolution))
+
+            masked_actions = self._mask(observation, actions)
+
+            valid_idx = masked_actions[masked_actions >= 0]
+            choice = th.multinomial(valid_idx, 1)
+            valid_idx = valid_idx.type(th.long)
+            action = valid_idx[choice]
+
+            print("\n\nExploring in next iteration: Random action index:", action)
+
         return action
 
     def _get_data(self) -> Dict[str, Any]:
