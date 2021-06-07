@@ -91,16 +91,16 @@ class PGQNetwork(BasePolicy):
 
         masked_input = obs > threshold_norm
         masked_input = masked_input.type(th.float)
-        diluted_mask = th.nn.functional.max_pool2d(input=masked_input,kernel_size=(40,40),stride=(1,1),padding=20)
+        diluted_mask = th.nn.functional.max_pool2d(input=masked_input,kernel_size=(34,34),stride=(1,1),padding=17)
 
         diluted_mask = th.narrow(diluted_mask, 2, 1, self.heightmap_resolution)
         diluted_mask = th.narrow(diluted_mask, 3, 1, self.heightmap_resolution)
 
-        """diluted_safe_mask = th.nn.functional.max_pool2d(input=masked_input,kernel_size=(6,6),stride=(1,1),padding=3)
+        diluted_safe_mask = th.nn.functional.max_pool2d(input=masked_input,kernel_size=(6,6),stride=(1,1),padding=3)
         diluted_safe_mask = th.narrow(diluted_safe_mask, 2, 1, self.heightmap_resolution)
         diluted_safe_mask = th.narrow(diluted_safe_mask, 3, 1, self.heightmap_resolution)
         diluted_mask = th.logical_xor(diluted_mask, diluted_safe_mask)
-        diluted_mask = diluted_mask.type(th.float)"""
+        diluted_mask = diluted_mask.type(th.float)
 
         diluted_mask = diluted_mask - 1.
         diluted_mask = diluted_mask * th.finfo(th.float).max
