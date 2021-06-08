@@ -66,7 +66,7 @@ class PGQNetwork(BasePolicy):
             # Greedy action
             action = q_values.argmax(dim=1).reshape(-1)
         else:
-            actions = th.arange(start=0, end=self.num_rotations*self.heightmap_resolution*self.heightmap_resolution, dtype=th.long)
+            actions = th.arange(start=0, end=self.num_rotations*self.heightmap_resolution*self.heightmap_resolution, dtype=th.long).to(self.device)
             actions = actions.reshape((1, self.num_rotations, self.heightmap_resolution, self.heightmap_resolution))
 
             masked_actions = self._mask(observation, actions)
