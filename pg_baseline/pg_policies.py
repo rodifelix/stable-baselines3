@@ -72,9 +72,9 @@ class PGQNetwork(BasePolicy):
             masked_actions = self._mask(observation, actions)
 
             valid_idx = masked_actions[masked_actions >= 0]
-            choice = th.multinomial(valid_idx, 1)
+            choice = np.random.randint(low=0, high=len(valid_idx))
             valid_idx = valid_idx.type(th.long)
-            action = valid_idx[choice]
+            action = valid_idx[choice].reshape(-1)
 
             print("\n\nExploring in next iteration: Random action index:", action)
 
