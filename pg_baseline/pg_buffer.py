@@ -68,12 +68,13 @@ class PGBuffer(ReplayBuffer):
         self.dones = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.completes = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.surprise = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
+        self.change = np.zeros((self.buffer_size, self.n_envs), dtype=np.bool)
         self.save_indices = []
         self.iteration = np.zeros((self.buffer_size, self.n_envs), dtype=np.int32)
         self.iteration_offset = 0
 
         if psutil is not None:
-            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.completes.nbytes
+            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.completes.nbytes + self.change.nbytes
             if self.next_observations is not None:
                 total_memory_usage += self.next_observations.nbytes
 
@@ -98,6 +99,7 @@ class PGBuffer(ReplayBuffer):
         self.rewards[self.pos] = np.array(reward).copy()
         self.dones[self.pos] = np.array(done).copy()
         self.completes[self.pos] = np.array(reward > 10).copy()
+        self.change[self.pos] = np.array(reward > -0.5).copy()
         self.iteration[self.pos] = [self.iteration_offset*self.buffer_size + self.pos]
 
         self.pos += 1
@@ -124,22 +126,40 @@ class PGBuffer(ReplayBuffer):
             batch_size = min(upper_bound, batch_size)
             most_recent_element_idx = self.buffer_size - 1 if self.pos == 0 else self.pos-1
             assert batch_size > 0, "Error: Nothing in buffer to sample or batch_size set to 0" 
+            #always sample most recent element
+            self.save_indices = np.array([most_recent_element_idx], dtype=np.int64)
             if batch_size > 1:                
-                sorted_surprise_ind = np.argsort(self.surprise[:upper_bound,0]).astype(int)
-                #skip element most recent element at self.pos-1, as this will always be selected
-                sorted_surprise_ind = sorted_surprise_ind[sorted_surprise_ind != most_recent_element_idx]
-                for i in range(batch_size-1):
-                    rand_sample_ind = np.round(np.random.power(2, 1)*(sorted_surprise_ind.size-1)).astype(int)
-                    if i == 0:
-                        self.save_indices = sorted_surprise_ind[rand_sample_ind]
-                    else:
-                        self.save_indices = np.append(self.save_indices, sorted_surprise_ind[rand_sample_ind])
-                    sorted_surprise_ind = np.delete(sorted_surprise_ind, rand_sample_ind)
+                valid_surprise = self.surprise[:upper_bound,0]
+                valid_changes = self.change[:upper_bound,0]
 
-                # Always sample the most recent entry to generate surprise value
-                self.save_indices = np.append(self.save_indices, [most_recent_element_idx])
-            else:
-                self.save_indices = [most_recent_element_idx]
+                change_indices = np.where(valid_changes)[0]
+                no_change_indices = np.where(~valid_changes)[0]
+
+                change_surprise = valid_surprise[valid_changes]
+                no_change_surprise = valid_surprise[~valid_changes]
+
+                sorted_surprise_ind_change = change_indices[np.argsort(change_surprise).astype(int)]
+                sorted_surprise_ind_no_change = no_change_indices[np.argsort(no_change_surprise).astype(int)]
+
+                sorted_surprise_ind_change = sorted_surprise_ind_change[sorted_surprise_ind_change != most_recent_element_idx]
+                sorted_surprise_ind_no_change = sorted_surprise_ind_no_change[sorted_surprise_ind_no_change != most_recent_element_idx]
+                
+                sampled_count = 1
+                while sampled_count < batch_size:
+                    if sorted_surprise_ind_change.size > 0:
+                        rand_sample_ind_change = np.round(np.random.power(2, 1)*(sorted_surprise_ind_change.size-1)).astype(int)
+                        self.save_indices = np.append(self.save_indices, sorted_surprise_ind_change[rand_sample_ind_change])
+                        sampled_count += 1
+                        sorted_surprise_ind_change = np.delete(sorted_surprise_ind_change, rand_sample_ind_change)
+                    
+                    if sampled_count >= batch_size:
+                        break
+
+                    if sorted_surprise_ind_no_change.size > 0:
+                        rand_sample_ind_no_change = np.round(np.random.power(2, 1)*(sorted_surprise_ind_no_change.size-1)).astype(int)
+                        self.save_indices = np.append(self.save_indices, sorted_surprise_ind_no_change[rand_sample_ind_no_change])
+                        sampled_count += 1
+                        sorted_surprise_ind_no_change = np.delete(sorted_surprise_ind_no_change, rand_sample_ind_no_change)
 
             return self._get_samples(self.save_indices, env=env)
         else:
