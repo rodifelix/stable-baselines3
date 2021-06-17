@@ -262,7 +262,7 @@ class PGDQN(OffPolicyAlgorithm):
         :return: the model's action and the next state
             (used in recurrent policies)
         """
-        explore = np.random.rand() < self.exploration_rate
+        explore = np.random.rand() < self.exploration_rate or (self.num_timesteps < self.trainings_starts)
         action, state = self.policy.predict(observation, state, mask, not explore)
         return action, state
 
