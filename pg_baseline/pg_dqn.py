@@ -222,8 +222,10 @@ class PGDQN(OffPolicyAlgorithm):
                     target_q = target_q.gather(dim=1, index=action_idx.long())
                     # Avoid potential broadcast issue
                     target_q = target_q.reshape(-1, 1)
+                    # compute future flag
+                    future_flag = th.logical_or(replay_data.completes, replay_data.rewards == -0.5, out=th.empty_like(replay_data.completes))
                     # 1-step TD target
-                    target_q = replay_data.rewards + (1 - replay_data.completes) * self.gamma * target_q
+                    target_q = replay_data.rewards + (1 - future_flag) * self.gamma * target_q
                 else:
                     target_q = replay_data.rewards
 
