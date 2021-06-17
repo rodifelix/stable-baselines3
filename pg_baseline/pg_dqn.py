@@ -160,7 +160,7 @@ class PGDQN(OffPolicyAlgorithm):
         Update the exploration rate and target network if needed.
         This method is called in ``collect_rollout()`` after each step in the environment.
         """
-        if self.num_timesteps % self.target_update_interval == 0:
+        if self.num_timesteps % self.target_update_interval == 0 and self.num_timesteps > self.trainings_starts:
             polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
             self.gamma = self.gamma_schedule(self._current_progress_remaining)
 
