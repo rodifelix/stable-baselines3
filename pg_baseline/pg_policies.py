@@ -8,7 +8,7 @@ from collections import OrderedDict
 import numpy as np
 from torch.autograd import Variable
 import torch.nn.functional as F
-from pg_baseline import pg_hourglass
+from pg_baseline import pg_hourglass, pg_mask_net
 
 from stable_baselines3.common.policies import BasePolicy, register_policy
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, FlattenExtractor, NatureCNN, create_mlp
@@ -53,6 +53,15 @@ class PGQNetwork(BasePolicy):
 
         self.timestep = 1
 
+        params_mask = pg_mask_net.get_psp_parameters()
+
+        params_mask['output_channels'] = self.num_rotations
+
+        self.mask_net = pg_mask_net.PushingSuccessPredictor(params_mask)
+
+        self.mask_threshhold = 0.14
+
+
 
     def forward(self, obs: th.Tensor, mask=True) -> th.Tensor:
         """
@@ -68,6 +77,10 @@ class PGQNetwork(BasePolicy):
             output_prob = self._mask(obs, output_prob)
 
         return th.reshape(output_prob, (batch_size, self.num_rotations*self.heightmap_resolution*self.heightmap_resolution))
+
+    def mask(self, obs: th.Tensor) -> th.Tensor:
+        mask_output =  self.mask_net.forward(obs)
+        return th.reshape(mask_output, (obs.shape[0], self.num_rotations*self.heightmap_resolution*self.heightmap_resolution))
 
     def _predict(self, observation: th.Tensor, deterministic: bool = True) -> th.Tensor:        
         if deterministic:
@@ -88,7 +101,7 @@ class PGQNetwork(BasePolicy):
             actions = th.arange(start=0, end=self.num_rotations*self.heightmap_resolution*self.heightmap_resolution, dtype=th.long).to(self.device)
             actions = actions.reshape((1, self.num_rotations, self.heightmap_resolution, self.heightmap_resolution))
 
-            masked_actions = self._mask(observation, actions)
+            masked_actions = self.explore_mask(observation, actions)
 
             valid_idx = masked_actions[masked_actions >= 0]
             if len(valid_idx) > 0:
@@ -115,6 +128,15 @@ class PGQNetwork(BasePolicy):
         return data
 
     def _mask(self, obs: th.Tensor, output_prob: th.Tensor):
+        mask =  self.mask_net.forward(obs)
+
+        mask = mask >= self.mask_threshhold
+        mask = mask.float() - 1.
+        mask = mask * th.finfo(th.float).max
+
+        return output_prob + mask
+
+    def explore_mask(self, obs: th.Tensor, output_prob: th.Tensor):
         threshhold_depth = 0.01
         depth_min = 0.0
         depth_max = 0.1
@@ -208,7 +230,8 @@ class PGDQNPolicy(BasePolicy):
         self.q_net_target.load_state_dict(self.q_net.state_dict())
 
         # Setup optimizer with initial learning rate
-        self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
+        self.optimizer = self.optimizer_class(self.q_net.net.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
+        self.mask_optimizer = th.optim.Adam(self.q_net.mask_net.parameters(), lr=lr_schedule(1))
 
     def make_q_net(self) -> PGQNetwork:
         #TODO: DO WE NEED THIS?

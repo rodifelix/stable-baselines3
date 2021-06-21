@@ -137,6 +137,8 @@ class PGDQN(OffPolicyAlgorithm):
 
         self.testing_mode = testing_mode
 
+        self.update_mask = True
+
         if _init_setup_model:
             self._setup_model()
 
@@ -263,8 +265,24 @@ class PGDQN(OffPolicyAlgorithm):
             self.policy.optimizer.zero_grad()
             loss.backward()
             # Clip gradient norm
-            th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
+            th.nn.utils.clip_grad_norm_(self.policy.q_net.net.parameters(), self.max_grad_norm)
             self.policy.optimizer.step()
+
+
+            if self.update_mask:
+                mask = self.q_net.mask(replay_data.observations)
+                
+                predictions = th.gather(mask, dim=1, index=replay_data.actions.long())
+
+                labels = (replay_data.rewards != -0.5).float()
+
+                mask_loss = F.binary_cross_entropy(predictions, labels)
+
+                self.policy.mask_optimizer.zero_grad()
+                mask_loss.backward()
+                # Clip gradient norm
+                th.nn.utils.clip_grad_norm_(self.policy.q_net.mask_net.parameters(), self.max_grad_norm)
+                self.policy.mask_optimizer.step()
 
             np.add.at(self.train_counter, replay_data.iterations.cpu(), 1)
 
