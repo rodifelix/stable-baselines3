@@ -19,6 +19,7 @@ class PGBufferSamples(NamedTuple):
     actions: th.Tensor
     next_observations: th.Tensor
     dones: th.Tensor
+    change: th.Tensor
     completes: th.Tensor
     rewards: th.Tensor
     iterations: th.Tensor
@@ -68,12 +69,13 @@ class PGBuffer(ReplayBuffer):
         self.dones = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.completes = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.surprise = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
+        self.change = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.save_indices = []
         self.iteration = np.zeros((self.buffer_size, self.n_envs), dtype=np.int32)
         self.iteration_offset = 0
 
         if psutil is not None:
-            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.completes.nbytes
+            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.completes.nbytes + self.change.nbytes
             if self.next_observations is not None:
                 total_memory_usage += self.next_observations.nbytes
 
@@ -86,7 +88,7 @@ class PGBuffer(ReplayBuffer):
                     f"replay buffer {total_memory_usage:.2f}GB > {mem_available:.2f}GB"
                 )
 
-    def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, done: np.ndarray) -> None:
+    def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: bool, done: np.ndarray) -> None:
         # Copy to avoid modification by reference
         self.observations[self.pos] = np.array(obs).copy()
         if self.optimize_memory_usage:
@@ -98,6 +100,7 @@ class PGBuffer(ReplayBuffer):
         self.rewards[self.pos] = np.array(reward).copy()
         self.dones[self.pos] = np.array(done).copy()
         self.completes[self.pos] = np.array(reward > 10).copy()
+        self.change[self.pos] = np.array(change)
         self.iteration[self.pos] = [self.iteration_offset*self.buffer_size + self.pos]
 
         self.pos += 1
@@ -162,6 +165,7 @@ class PGBuffer(ReplayBuffer):
             self.actions[batch_inds, 0, :],
             next_obs,
             self.dones[batch_inds],
+            self.change[batch_inds],
             self.completes[batch_inds],
             self._normalize_reward(self.rewards[batch_inds], env),
             self.iteration[batch_inds]
