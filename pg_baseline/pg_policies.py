@@ -16,8 +16,8 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, Flatten
 
 def init_weights(m):
     if type(m) == nn.Conv2d:
-        #nn.init.zeros_(m.weight.data)
-        nn.init.dirac_(m.weight.data)
+        nn.init.zeros_(m.weight.data)
+        #nn.init.dirac_(m.weight.data)
         #nn.init.kaiming_normal_(m.weight.data, nonlinearity='relu')
     elif type(m) == nn.InstanceNorm2d:
         m.weight.data.fill_(1)
