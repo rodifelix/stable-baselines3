@@ -29,7 +29,8 @@ class PGQNetwork(BasePolicy):
         action_space: gym.spaces.Space,
         heightmap_resolution: int,
         num_rotations: int,
-        ucb_confidence: float
+        ucb_confidence: float,
+        preload_mask_path: Optional[str],
     ):
         super(PGQNetwork, self).__init__(
             observation_space,
@@ -60,6 +61,12 @@ class PGQNetwork(BasePolicy):
         self.mask_net = pg_mask_net.PushingSuccessPredictor(params_mask)
 
         self.mask_threshhold = 0.14
+
+        self.preload_mask_path = preload_mask_path
+
+        if self.preload_mask_path is not None:
+            mask_state_dict = th.load(preload_mask_path)
+            self.mask_net.load_state_dict(mask_state_dict)
 
 
 
@@ -122,7 +129,8 @@ class PGQNetwork(BasePolicy):
             dict(
                 heightmap_resolution=self.heightmap_resolution,
                 num_rotations=self.num_rotations,
-                ucb_confidence=self.ucb_confidence,         
+                ucb_confidence=self.ucb_confidence,
+                preload_mask_path=self.preload_mask_path         
             )
         )
         return data
@@ -186,6 +194,7 @@ class PGDQNPolicy(BasePolicy):
         heightmap_resolution: int,
         num_rotations: int,
         ucb_confidence: float,
+        preload_mask_path: Optional[str] = None,
         optimizer_class: Type[th.optim.Optimizer] = th.optim.SGD,
         optimizer_kwargs: Optional[Dict[str, Any]] = {
             "momentum": 0.9,
@@ -212,6 +221,7 @@ class PGDQNPolicy(BasePolicy):
             "heightmap_resolution": self.heightmap_resolution,
             "num_rotations": self.num_rotations,
             "ucb_confidence": self.ucb_confidence,
+            "preload_mask_path": preload_mask_path,
         }
 
         self.q_net, self.q_net_target = None, None
