@@ -13,16 +13,6 @@ from pg_baseline import pg_hourglass
 from stable_baselines3.common.policies import BasePolicy, register_policy
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, FlattenExtractor, NatureCNN, create_mlp
 
-
-def init_weights(m):
-    if type(m) == nn.Conv2d:
-        #nn.init.zeros_(m.weight.data)
-        nn.init.dirac_(m.weight.data)
-        #nn.init.kaiming_normal_(m.weight.data, nonlinearity='relu')
-    elif type(m) == nn.InstanceNorm2d:
-        m.weight.data.fill_(1)
-        m.bias.data.zero_()
-
 class PGQNetwork(BasePolicy):
     """
     Action-Value (Q-Value) network for DQN
@@ -54,8 +44,6 @@ class PGQNetwork(BasePolicy):
         params['output_channels'] = self.num_rotations
 
         self.net = pg_hourglass.Push_Into_Box_Net(params)
-
-        self.net.apply(init_weights)
 
         self.action_counter = np.ones((8), dtype=np.int)
 
