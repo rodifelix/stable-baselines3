@@ -88,9 +88,13 @@ class PGQNetwork(BasePolicy):
             masked_actions = self._mask(observation, actions)
 
             valid_idx = masked_actions[masked_actions >= 0]
-            choice = np.random.randint(low=0, high=len(valid_idx))
-            valid_idx = valid_idx.type(th.long)
-            action = valid_idx[choice].reshape(-1)
+            if len(valid_idx) > 0:
+                choice = np.random.randint(low=0, high=len(valid_idx))
+                valid_idx = valid_idx.type(th.long)
+                action = valid_idx[choice].reshape(-1)
+            else:
+                print("\n\n No valid actions after mask. Is scene empty? Returning action 0")
+                action = th.zeros([1], device=self.device, dtype=th.int64)
 
             print("\n\nExploring in next iteration: Random action index:", action)
         return action
