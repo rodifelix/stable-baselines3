@@ -52,7 +52,7 @@ class PGQNetwork(BasePolicy):
         self.timestep = 1
 
 
-    def forward(self, obs: th.Tensor) -> th.Tensor:
+    def forward(self, obs: th.Tensor, mask=True) -> th.Tensor:
         """
         Predict the q-values.
         :param obs: Observation. Expects Tensor with shape N x C x H x W
@@ -62,7 +62,8 @@ class PGQNetwork(BasePolicy):
 
         output_prob = self.net.forward(obs.to(self.device))
 
-        output_prob = self._mask(obs, output_prob)
+        if mask:
+            output_prob = self._mask(obs, output_prob)
 
         return th.reshape(output_prob, (batch_size, self.num_rotations*self.heightmap_resolution*self.heightmap_resolution))
 
