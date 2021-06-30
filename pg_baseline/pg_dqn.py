@@ -439,7 +439,7 @@ class PGDQN(OffPolicyAlgorithm):
                         # Avoid changing the original ones
                         self._last_original_obs, new_obs_, reward_ = self._last_obs, new_obs, reward
 
-                    replay_buffer.add(self._last_original_obs, new_obs_, buffer_action, reward_, done)
+                    replay_buffer.add(self._last_original_obs, infos[0]["terminal_observation"].detach().cpu().numpy() if done else new_obs_, buffer_action, reward_, done)
 
                 self._last_obs = new_obs
                 # Save the unnormalized observation
