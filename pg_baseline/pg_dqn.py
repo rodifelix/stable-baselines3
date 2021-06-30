@@ -329,7 +329,7 @@ class PGDQN(OffPolicyAlgorithm):
                 _, action_idx = self.q_net.forward(next_obs).max(dim=1)
                 action_idx = action_idx.unsqueeze(0).T
                 # Compute the target Q values
-                target_q = self.q_net_target.forward(next_obs)
+                target_q = self.q_net_target.forward(next_obs, mask=False)
                 # Evaluate action with target network
                 target_q = target_q.gather(dim=1, index=action_idx.long())
                 # Avoid potential broadcast issue
@@ -342,7 +342,7 @@ class PGDQN(OffPolicyAlgorithm):
         action = action.unsqueeze(0)
         # Get current Q 
         # forward type, batch_size images, each with one specific rotation 
-        current_q = self.q_net.forward(obs)
+        current_q = self.q_net.forward(obs, mask=False)
 
         # Retrieve the q-values for the actions from the replay buffer
         current_q = th.gather(current_q, dim=1, index=action)
