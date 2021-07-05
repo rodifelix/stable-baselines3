@@ -337,7 +337,7 @@ class PGDQN(OffPolicyAlgorithm):
                 # 1-step TD target
                 target_q = reward + (1 - complete) * self.gamma * target_q
             else:
-                target_q = th.Tensor([[reward]])
+                target_q = th.Tensor([[reward]]).to(self.device)
 
         action = action.unsqueeze(0)
         # Get current Q 
