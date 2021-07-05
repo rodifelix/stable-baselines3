@@ -173,5 +173,41 @@ class PGBuffer(ReplayBuffer):
         self.surprise[self.save_indices] = new_values.copy()
         self.save_indices = []
 
+def merge_buffers(*buffers, 
+    buffer_size: int,
+    observation_space: spaces.Space,
+    action_space: spaces.Space,
+    device: Union[th.device, str] = "cpu",
+    n_envs: int = 1,
+    optimize_memory_usage: bool = False,):
+    
+    merged_buffer = PGBuffer(buffer_size, observation_space, action_space, device, n_envs, optimize_memory_usage)
+    
+    samples_count = sum(buffer.buffer_size if buffer.full else buffer.pos for buffer in buffers)
+
+    pos = 0
+    if samples_count <= buffer_size:
+        for buffer in buffers:
+            if buffer.full:
+                count = buffer.buffer_size
+            else:
+                count = buffer.pos
+        
+            merged_buffer.observations[pos:count] = buffer.observations[:count]
+            merged_buffer.next_observations[pos:count] = buffer.next_observations[:count]
+            merged_buffer.actions[pos:count] = buffer.actions[:count]
+            merged_buffer.rewards[pos:count] = buffer.rewards[:count]
+            merged_buffer.dones[pos:count] = buffer.dones[:count]
+            merged_buffer.completes[pos:count] = buffer.completes[:count]
+            merged_buffer.surprise[pos:count] = buffer.surprise[:count]            
+            pos +=count
+        
+        merged_buffer.iteration[:pos] = np.reshape(np.arange(pos, dtype=np.int32), (pos, 1))
+        merged_buffer.iteration_offset = 0
+        merged_buffer.pos = pos
+    else:
+        raise NotImplementedError("Can only merge if resulting buffer size is less or equal specified buffer size argument")
+    
+
 
 
