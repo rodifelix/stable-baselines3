@@ -107,7 +107,9 @@ class PGQNetwork(BasePolicy):
 
         data.update(
             dict(
-                heightmap_resolution=self.heightmap_resolution,          
+                heightmap_resolution=self.heightmap_resolution,
+                num_rotations=self.num_rotations,
+                ucb_confidence=self.ucb_confidence,         
             )
         )
         return data
