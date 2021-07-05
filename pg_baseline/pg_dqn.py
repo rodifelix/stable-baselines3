@@ -140,13 +140,14 @@ class PGDQN(OffPolicyAlgorithm):
     def _setup_model(self) -> None:
         self._setup_lr_schedule()
         self.set_random_seed(self.seed)
-        self.replay_buffer = PGBuffer(
-            self.buffer_size,
-            self.observation_space,
-            self.action_space,
-            self.device,
-            optimize_memory_usage=self.optimize_memory_usage,
-        )
+        if self.replay_buffer is None:
+            self.replay_buffer = PGBuffer(
+                self.buffer_size,
+                self.observation_space,
+                self.action_space,
+                self.device,
+                optimize_memory_usage=self.optimize_memory_usage,
+            )
         self.policy = self.policy_class(
             self.observation_space,
             self.action_space,
