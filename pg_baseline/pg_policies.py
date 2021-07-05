@@ -166,7 +166,6 @@ class PGDQNPolicy(BasePolicy):
         heightmap_resolution: int,
         optimizer_class: Type[th.optim.Optimizer] = th.optim.SGD,
         optimizer_kwargs: Optional[Dict[str, Any]] = {
-            "lr": 1e-4,
             "momentum": 0.9,
             "weight_decay": 2e-5,
         },
@@ -203,7 +202,7 @@ class PGDQNPolicy(BasePolicy):
         self.q_net_target.load_state_dict(self.q_net.state_dict())
 
         # Setup optimizer with initial learning rate
-        self.optimizer = self.optimizer_class(self.parameters(), **self.optimizer_kwargs)
+        self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
     def make_q_net(self) -> PGQNetwork:
         #TODO: DO WE NEED THIS?
