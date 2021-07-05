@@ -70,7 +70,9 @@ class PGDQN(OffPolicyAlgorithm):
         learning_starts: int = 1000,
         batch_size: Optional[int] = 50,
         tau: float = 1.0,
-        gamma: float = 0.8,
+        start_gamma : float = 0,
+        final_gamma: float = 0.8,
+        gamma_fraction: float = 0.75,
         train_freq: int = 4,
         gradient_steps: int = 1,
         n_episodes_rollout: int = -1,
@@ -100,7 +102,7 @@ class PGDQN(OffPolicyAlgorithm):
             0, #learning_starts
             batch_size,
             tau,
-            0, #gamma
+            start_gamma,
             train_freq,
             gradient_steps,
             n_episodes_rollout,
@@ -127,7 +129,10 @@ class PGDQN(OffPolicyAlgorithm):
         self.q_net, self.q_net_target = None, None
 
         self.trainings_starts = learning_starts
-        self.final_gamma = gamma
+
+        self.start_gamma = start_gamma
+        self.final_gamma = final_gamma
+        self.gamma_fraction = gamma_fraction
 
         if _init_setup_model:
             self._setup_model()
@@ -154,7 +159,7 @@ class PGDQN(OffPolicyAlgorithm):
             self.exploration_initial_eps, self.exploration_final_eps, self.exploration_fraction
         )
         self.gamma_schedule = get_linear_fn(
-            start=0, end=self.final_gamma, end_fraction=0.75
+            start=self.start_gamma, end=self.final_gamma, end_fraction=self.gamma_fraction
         )
 
     def _create_aliases(self) -> None:
