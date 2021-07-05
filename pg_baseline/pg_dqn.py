@@ -88,6 +88,8 @@ class PGDQN(OffPolicyAlgorithm):
         device: Union[th.device, str] = "auto",
         _init_setup_model: bool = True,
     ):
+        if optimize_memory_usage:
+            raise NotImplementedError("Optimize memory usage not supported")
 
         super(PGDQN, self).__init__(
             policy,
