@@ -28,6 +28,8 @@ class PGQNetwork(BasePolicy):
         observation_space: gym.spaces.Space,
         action_space: gym.spaces.Space,
         heightmap_resolution: int,
+        num_rotations: int,
+        ucb_confidence: float
     ):
         super(PGQNetwork, self).__init__(
             observation_space,
@@ -37,7 +39,7 @@ class PGQNetwork(BasePolicy):
 
         self.heightmap_resolution = heightmap_resolution
 
-        self.num_rotations = 8
+        self.num_rotations = num_rotations
 
         params = pg_hourglass.get_pibn_parameters()
 
@@ -45,9 +47,9 @@ class PGQNetwork(BasePolicy):
 
         self.net = pg_hourglass.Push_Into_Box_Net(params)
 
-        self.action_counter = np.ones((8), dtype=np.int)
+        self.action_counter = np.ones((self.num_rotations), dtype=np.int)
 
-        self.confidence = 1
+        self.ucb_confidence = ucb_confidence
 
         self.timestep = 1
 
@@ -74,7 +76,7 @@ class PGQNetwork(BasePolicy):
             # UCB
             action_idxs = q_values.argmax(axis=1)
             actions = q_values.max(axis=1)
-            confidence_value = self.confidence * np.sqrt(np.log(self.timestep)/self.action_counter)
+            confidence_value = self.ucb_confidence * np.sqrt(np.log(self.timestep)/self.action_counter)
             actions += confidence_value
             rotation = actions.argmax()
             action = rotation*self.heightmap_resolution*self.heightmap_resolution + action_idxs[rotation]
@@ -164,6 +166,8 @@ class PGDQNPolicy(BasePolicy):
         action_space: gym.spaces.Space,
         lr_schedule: Callable,
         heightmap_resolution: int,
+        num_rotations: int,
+        ucb_confidence: float,
         optimizer_class: Type[th.optim.Optimizer] = th.optim.SGD,
         optimizer_kwargs: Optional[Dict[str, Any]] = {
             "momentum": 0.9,
@@ -178,12 +182,18 @@ class PGDQNPolicy(BasePolicy):
             optimizer_kwargs=optimizer_kwargs,
         )
 
+        #TODO: maybe assert size of obsvertion and action space match heightmap and num rotations
+
         self.heightmap_resolution = heightmap_resolution
+        self.num_rotations = num_rotations
+        self.ucb_confidence = ucb_confidence
 
         self.net_args = {
             "observation_space": self.observation_space,
             "action_space": self.action_space,
             "heightmap_resolution": self.heightmap_resolution,
+            "num_rotations": self.num_rotations,
+            "ucb_confidence": self.ucb_confidence,
         }
 
         self.q_net, self.q_net_target = None, None
@@ -222,6 +232,8 @@ class PGDQNPolicy(BasePolicy):
         data.update(
             dict(
                 heightmap_resolution=self.heightmap_resolution,
+                num_rotations=self.num_rotations,
+                ucb_confidence=self.ucb_confidence,  
                 lr_schedule=self._dummy_schedule,  # dummy lr schedule, not needed for loading policy alone
                 optimizer_class=self.optimizer_class,
                 optimizer_kwargs=self.optimizer_kwargs,
