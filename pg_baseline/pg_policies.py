@@ -117,7 +117,7 @@ class PGQNetwork(BasePolicy):
         threshold_norm = (threshhold_depth - depth_min)/(depth_max - depth_min)
 
         masked_input = obs > threshold_norm
-        masked_input = masked_input.type(th.float)
+        masked_input = masked_input.type(th.float).to(self.device)
         diluted_mask = th.nn.functional.max_pool2d(input=masked_input,kernel_size=(34,34),stride=(1,1),padding=17)
 
         diluted_mask = th.narrow(diluted_mask, 2, 1, self.heightmap_resolution)
