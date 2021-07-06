@@ -89,6 +89,7 @@ class PGDQN(OffPolicyAlgorithm):
         seed: Optional[int] = None,
         device: Union[th.device, str] = "auto",
         _init_setup_model: bool = True,
+        testing_mode : bool = False,
     ):
         if optimize_memory_usage:
             raise NotImplementedError("Optimize memory usage not supported")
@@ -134,13 +135,15 @@ class PGDQN(OffPolicyAlgorithm):
         self.final_gamma = final_gamma
         self.gamma_fraction = gamma_fraction
 
+        self.testing_mode = testing_mode
+
         if _init_setup_model:
             self._setup_model()
 
     def _setup_model(self) -> None:
         self._setup_lr_schedule()
         self.set_random_seed(self.seed)
-        if self.replay_buffer is None:
+        if self.replay_buffer is None and not self.testing_mode:
             self.replay_buffer = PGBuffer(
                 self.buffer_size,
                 self.observation_space,
