@@ -227,7 +227,7 @@ class PGDQN(OffPolicyAlgorithm):
             return
 
 
-        self._update_learning_rate(self.policy.optimizer)
+        self._update_learning_rate([self.policy.optimizer, self.policy.mask_optimizer])
 
         losses = []
         for gradient_step in range(gradient_steps):
