@@ -200,7 +200,8 @@ class PGDQN(OffPolicyAlgorithm):
             self.save(os.path.join(self.tensorboard_log, '..', "pqn_quarter.zip"))
 
         if self.num_timesteps == self._total_timesteps/2:
-            self.save(os.path.join(self.tensorboard_log, '..', "pqn_halfway.zip"))
+            print("Saving model with replay buffer at halfway mark")
+            self.save(os.path.join(self.tensorboard_log, '..', "pqn_halfway.zip"), include=["replay_buffer"])
 
         if self.num_timesteps == self._total_timesteps*3/4:
             self.save(os.path.join(self.tensorboard_log, '..', "pqn_three_quarter.zip"))
