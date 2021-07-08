@@ -143,14 +143,18 @@ class PGDQN(OffPolicyAlgorithm):
     def _setup_model(self) -> None:
         self._setup_lr_schedule()
         self.set_random_seed(self.seed)
-        if self.replay_buffer is None and not self.testing_mode:
-            self.replay_buffer = PGBuffer(
-                self.buffer_size,
-                self.observation_space,
-                self.action_space,
-                self.device,
-                optimize_memory_usage=self.optimize_memory_usage,
-            )
+        if not self.testing_mode:
+            if self.replay_buffer is None:
+                self.replay_buffer = PGBuffer(
+                    self.buffer_size,
+                    self.observation_space,
+                    self.action_space,
+                    self.device,
+                    optimize_memory_usage=self.optimize_memory_usage,
+                )
+            else:
+                self.replay_buffer.device = self.device
+                
         self.policy = self.policy_class(
             self.observation_space,
             self.action_space,
@@ -309,7 +313,10 @@ class PGDQN(OffPolicyAlgorithm):
         reset_num_timesteps: bool = True,
     ) -> OffPolicyAlgorithm:
 
-        self.train_counter = np.zeros(total_timesteps, dtype=np.uint16)
+        if reset_num_timesteps or self.train_counter is None:
+            self.train_counter = np.zeros(total_timesteps, dtype=np.uint16)
+        else:
+            self.train_counter = np.append(self.train_counter, np.zeros(total_timesteps, dtype=np.uint16), axis=0)
 
         super(PGDQN, self).learn(
             total_timesteps=total_timesteps,
