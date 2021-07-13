@@ -16,12 +16,6 @@ from stable_baselines3.common.noise import ActionNoise
 from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.callbacks import BaseCallback
 
-from stable_baselines3.common.type_aliases import RolloutReturn
-from stable_baselines3.common.buffers import ReplayBuffer
-from stable_baselines3.common.vec_env import VecEnv
-from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.noise import ActionNoise
-
 class PGDQN(OffPolicyAlgorithm):
     """
     Deep Q-Network (DQN)
