@@ -337,7 +337,7 @@ class PGDQN(OffPolicyAlgorithm):
         reset_num_timesteps: bool = True,
     ) -> OffPolicyAlgorithm:
 
-        if reset_num_timesteps or self.train_counter is None:
+        if reset_num_timesteps or not hasattr(self, 'train_counter'):
             self.train_counter = np.zeros(total_timesteps, dtype=np.uint16)
         else:
             self.train_counter = np.append(self.train_counter, np.zeros(total_timesteps, dtype=np.uint16), axis=0)
