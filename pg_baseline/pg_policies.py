@@ -191,6 +191,7 @@ class PGDQNPolicy(BasePolicy):
         observation_space: gym.spaces.Space,
         action_space: gym.spaces.Space,
         lr_schedule: Callable,
+        use_target: bool,
         heightmap_resolution: int,
         num_rotations: int,
         ucb_confidence: float,
@@ -214,6 +215,7 @@ class PGDQNPolicy(BasePolicy):
         self.heightmap_resolution = heightmap_resolution
         self.num_rotations = num_rotations
         self.ucb_confidence = ucb_confidence
+        self.use_target = use_target
 
         self.net_args = {
             "observation_space": self.observation_space,
@@ -236,8 +238,9 @@ class PGDQNPolicy(BasePolicy):
         """
 
         self.q_net = self.make_q_net()
-        self.q_net_target = self.make_q_net()
-        self.q_net_target.load_state_dict(self.q_net.state_dict())
+        if self.use_target:
+            self.q_net_target = self.make_q_net()
+            self.q_net_target.load_state_dict(self.q_net.state_dict())
 
         # Setup optimizer with initial learning rate
         self.optimizer = self.optimizer_class(self.q_net.net.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
@@ -266,6 +269,7 @@ class PGDQNPolicy(BasePolicy):
                 lr_schedule=self._dummy_schedule,  # dummy lr schedule, not needed for loading policy alone
                 optimizer_class=self.optimizer_class,
                 optimizer_kwargs=self.optimizer_kwargs,
+                use_target=self.use_target,
             )
         )
         return data

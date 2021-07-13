@@ -90,6 +90,8 @@ class PGDQN(OffPolicyAlgorithm):
         _init_setup_model: bool = True,
         testing_mode : bool = False,
         update_mask: bool = True,
+        use_target: bool = True,
+        use_double_q: bool = True
     ):
         if optimize_memory_usage:
             raise NotImplementedError("Optimize memory usage not supported")
@@ -128,6 +130,9 @@ class PGDQN(OffPolicyAlgorithm):
         # Linear schedule will be defined in `_setup_model()`
         self.exploration_schedule = None
         self.q_net, self.q_net_target = None, None
+        
+        self.use_target = use_target
+        self.use_double_q = use_target and use_double_q #no target implies no double-q
 
         self.trainings_starts = learning_starts
 
@@ -156,7 +161,8 @@ class PGDQN(OffPolicyAlgorithm):
                 )
             else:
                 self.replay_buffer.device = self.device
-                
+
+        self.policy_kwargs["use_target"] = self.use_target
         self.policy = self.policy_class(
             self.observation_space,
             self.action_space,
@@ -182,7 +188,8 @@ class PGDQN(OffPolicyAlgorithm):
         This method is called in ``collect_rollout()`` after each step in the environment.
         """
         if self.num_timesteps % self.target_update_interval == 0 and self.num_timesteps > self.trainings_starts:
-            polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
+            if self.use_target:
+                polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
             self.gamma = self.gamma_schedule(self._current_progress_remaining)
 
         if self.num_timesteps == 1:
@@ -235,13 +242,21 @@ class PGDQN(OffPolicyAlgorithm):
 
             with th.no_grad():
                 if self.gamma > 0:
-                    # Select best estimated next action
-                    _, action_idx = self.q_net.forward(replay_data.next_observations).max(dim=1)
-                    action_idx = action_idx.unsqueeze(0).T
-                    # Compute the target Q values
-                    target_q = self.q_net_target.forward(replay_data.next_observations, mask=False)
-                    # Evaluate action with target network
-                    target_q = target_q.gather(dim=1, index=action_idx.long())
+                    next_max, next_max_idx = self.q_net.forward(replay_data.next_observations).max(dim=1)
+                    next_max_idx = next_max_idx.reshape(-1, 1)
+                    if self.use_target:
+                        if self.use_double_q:
+                            # Evaluate action selected by q-network with target network
+                            target_output = self.q_net_target.forward(replay_data.next_observations, mask=False)
+                            target_q = target_output.gather(dim=1, index=next_max_idx.long())
+                        else:
+                            # Evaluate action selected by target network with target network
+                            target_output = self.q_net_target.forward(replay_data.next_observations, mask=True)
+                            target_q, _ = target_output.max(dim=1)
+                    else:
+                        # Evaluate action selected by q-network with q-network
+                        target_q = next_max
+
                     # Avoid potential broadcast issue
                     target_q = target_q.reshape(-1, 1)
                     # 1-step TD target
@@ -481,13 +496,21 @@ class PGDQN(OffPolicyAlgorithm):
     def backward(self, obs, next_obs, action, reward, complete, change, update_mask):
         with th.no_grad():
             if self.gamma > 0:
-                # Select best estimated next action
-                _, action_idx = self.q_net.forward(next_obs).max(dim=1)
-                action_idx = action_idx.unsqueeze(0).T
-                # Compute the target Q values
-                target_q = self.q_net_target.forward(next_obs, mask=False)
-                # Evaluate action with target network
-                target_q = target_q.gather(dim=1, index=action_idx.long())
+                next_max, next_max_idx = self.q_net.forward(next_obs).max(dim=1)
+                next_max_idx = next_max_idx.reshape(-1, 1)
+                if self.use_target:
+                    if self.use_double_q:
+                        # Evaluate action selected by q-network with target network
+                        target_output = self.q_net_target.forward(next_obs, mask=False)
+                        target_q = target_output.gather(dim=1, index=next_max_idx.long())
+                    else:
+                        # Evaluate action selected by target network with target network
+                        target_output = self.q_net_target.forward(next_obs, mask=True)
+                        target_q, _ = target_output.max(dim=1)
+                else:
+                    # Evaluate action selected by q-network with q-network
+                    target_q = next_max
+
                 # Avoid potential broadcast issue
                 target_q = target_q.reshape(-1, 1)
                 # 1-step TD target
