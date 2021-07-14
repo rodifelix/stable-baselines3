@@ -92,7 +92,8 @@ class PGDQN(OffPolicyAlgorithm):
         update_mask: bool = True,
         use_target: bool = True,
         use_double_q: bool = True,
-        net_class: str="HG_Mask"
+        net_class: str = "HG_Mask",
+        loss_function: F = F.mse_loss,
     ):
         if optimize_memory_usage:
             raise NotImplementedError("Optimize memory usage not supported")
@@ -136,6 +137,8 @@ class PGDQN(OffPolicyAlgorithm):
         self.use_double_q = use_target and use_double_q #no target implies no double-q
 
         self.net_class = net_class
+
+        self.loss_function = loss_function
 
         self.trainings_starts = learning_starts
 
@@ -284,7 +287,7 @@ class PGDQN(OffPolicyAlgorithm):
             if th.any(current_q < (th.finfo(th.float).min/2)) or th.any(target_q < (th.finfo(th.float).min/2)):
                 print("Backprop over invalid numbers!!!!")
 
-            loss = F.mse_loss(current_q, target_q)
+            loss = self.loss_function(current_q, target_q)
             losses.append(loss.item())
 
             # Optimize the policy
@@ -539,7 +542,7 @@ class PGDQN(OffPolicyAlgorithm):
         current_q = th.gather(current_q, dim=1, index=action)
 
         # Compute Huber loss (less sensitive to outliers)
-        loss = F.mse_loss(current_q, target_q)
+        loss = self.loss_function(current_q, target_q)
 
         # Optimize the policy
         self.policy.optimizer.zero_grad()
@@ -549,7 +552,7 @@ class PGDQN(OffPolicyAlgorithm):
             th.nn.utils.clip_grad_norm_(self.policy.q_net.net.parameters(), self.max_grad_norm)
         else:
             th.nn.utils.clip_grad_norm_(self.policy.q_net.parameters(), self.max_grad_norm)
-            
+
         self.policy.optimizer.step()
 
         if update_mask:
