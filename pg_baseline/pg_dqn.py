@@ -91,7 +91,8 @@ class PGDQN(OffPolicyAlgorithm):
         testing_mode : bool = False,
         update_mask: bool = True,
         use_target: bool = True,
-        use_double_q: bool = True
+        use_double_q: bool = True,
+        net_class: str="HG_Mask"
     ):
         if optimize_memory_usage:
             raise NotImplementedError("Optimize memory usage not supported")
@@ -134,6 +135,8 @@ class PGDQN(OffPolicyAlgorithm):
         self.use_target = use_target
         self.use_double_q = use_target and use_double_q #no target implies no double-q
 
+        self.net_class = net_class
+
         self.trainings_starts = learning_starts
 
         self.start_gamma = start_gamma
@@ -142,7 +145,7 @@ class PGDQN(OffPolicyAlgorithm):
 
         self.testing_mode = testing_mode
 
-        self.update_mask = update_mask
+        self.update_mask = update_mask and self.net_class == "HG_Mask"
 
         if _init_setup_model:
             self._setup_model()
@@ -163,6 +166,7 @@ class PGDQN(OffPolicyAlgorithm):
                 self.replay_buffer.device = self.device
 
         self.policy_kwargs["use_target"] = self.use_target
+        self.policy_kwargs["net_class"] = self.net_class
         self.policy = self.policy_class(
             self.observation_space,
             self.action_space,
@@ -232,8 +236,10 @@ class PGDQN(OffPolicyAlgorithm):
                 self.replay_buffer.update_sample_surprise_values(new_surprise_values)
             return
 
-
-        self._update_learning_rate([self.policy.optimizer, self.policy.mask_optimizer])
+        if self.net_class == "HG_Mask":
+            self._update_learning_rate([self.policy.optimizer, self.policy.mask_optimizer])
+        else:
+            self._update_learning_rate([self.policy.optimizer])
 
         losses = []
         for gradient_step in range(gradient_steps):
@@ -285,9 +291,12 @@ class PGDQN(OffPolicyAlgorithm):
             self.policy.optimizer.zero_grad()
             loss.backward()
             # Clip gradient norm
-            th.nn.utils.clip_grad_norm_(self.policy.q_net.net.parameters(), self.max_grad_norm)
-            self.policy.optimizer.step()
+            if self.net_class == "HG_Mask":
+                th.nn.utils.clip_grad_norm_(self.policy.q_net.net.parameters(), self.max_grad_norm)
+            else:
+                th.nn.utils.clip_grad_norm_(self.policy.q_net.parameters(), self.max_grad_norm)
 
+            self.policy.optimizer.step()
 
             if self.update_mask:
                 mask = self.q_net.mask(replay_data.observations)
@@ -489,7 +498,10 @@ class PGDQN(OffPolicyAlgorithm):
         return super(PGDQN, self)._excluded_save_params() + ["q_net", "q_net_target"]
 
     def _get_torch_save_params(self) -> Tuple[List[str], List[str]]:
-        state_dicts = ["policy", "policy.optimizer", "policy.mask_optimizer"]
+        state_dicts = ["policy", "policy.optimizer"]
+        
+        if self.net_class == "HG_Mask":
+            state_dicts += ["policy.mask_optimizer"]
 
         return state_dicts, []
 
@@ -533,7 +545,11 @@ class PGDQN(OffPolicyAlgorithm):
         self.policy.optimizer.zero_grad()
         loss.backward()
         # Clip gradient norm
-        th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
+        if self.net_class == "HG_Mask":
+            th.nn.utils.clip_grad_norm_(self.policy.q_net.net.parameters(), self.max_grad_norm)
+        else:
+            th.nn.utils.clip_grad_norm_(self.policy.q_net.parameters(), self.max_grad_norm)
+            
         self.policy.optimizer.step()
 
         if update_mask:
