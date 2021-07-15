@@ -98,17 +98,20 @@ class PGQNetwork(BasePolicy):
 
     def _predict(self, observation: th.Tensor, deterministic: bool = True) -> th.Tensor:        
         if deterministic:
-            q_values = self.forward(observation).detach().cpu().numpy()
-            q_values = np.reshape(q_values, (self.num_rotations, -1))
-            # UCB
-            action_idxs = q_values.argmax(axis=1)
-            actions = q_values.max(axis=1)
-            confidence_value = self.ucb_confidence * np.sqrt(np.log(self.timestep)/self.action_counter)
-            actions += confidence_value
-            rotation = actions.argmax()
-            action = rotation*self.heightmap_resolution*self.heightmap_resolution + action_idxs[rotation]
-            action = th.tensor([action])
-
+            q_values = self.forward(observation)
+            if self.ucb_confidence > 0:
+                # UCB
+                q_values = np.reshape(q_values.detach().cpu().numpy(), (self.num_rotations, -1))
+                action_idxs = q_values.argmax(axis=1)
+                actions = q_values.max(axis=1)
+                confidence_value = self.ucb_confidence * np.sqrt(np.log(self.timestep)/self.action_counter)
+                actions += confidence_value
+                rotation = actions.argmax()
+                action = rotation*self.heightmap_resolution*self.heightmap_resolution + action_idxs[rotation]
+                action = th.tensor([action])
+            else:
+                action = q_values.argmax(dim=1)
+            
             self.action_counter[rotation] += 1
             self.timestep += 1
         else:
