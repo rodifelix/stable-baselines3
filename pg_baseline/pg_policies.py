@@ -70,7 +70,7 @@ class PGQNetwork(BasePolicy):
 
             if self.preload_mask_path is not None:
                 mask_state_dict = th.load(preload_mask_path)
-                self.mask_net.load_state_dict(mask_state_dict)
+                self.mask_net.load_state_dict(mask_state_dict, strict=True)
 
 
 
