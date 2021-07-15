@@ -98,6 +98,13 @@ class PGDQN(OffPolicyAlgorithm):
         if optimize_memory_usage:
             raise NotImplementedError("Optimize memory usage not supported")
 
+        self.start_gamma = start_gamma
+        self.final_gamma = final_gamma
+        self.gamma_fraction = gamma_fraction
+
+        if self.gamma_fraction == 0:
+            self.start_gamma = self.final_gamma
+
         super(PGDQN, self).__init__(
             policy,
             env,
@@ -107,7 +114,7 @@ class PGDQN(OffPolicyAlgorithm):
             0, #learning_starts
             batch_size,
             tau,
-            start_gamma,
+            self.start_gamma,
             train_freq,
             gradient_steps,
             n_episodes_rollout,
@@ -141,10 +148,6 @@ class PGDQN(OffPolicyAlgorithm):
         self.loss_function = loss_function
 
         self.trainings_starts = learning_starts
-
-        self.start_gamma = start_gamma
-        self.final_gamma = final_gamma
-        self.gamma_fraction = gamma_fraction
 
         self.testing_mode = testing_mode
 
