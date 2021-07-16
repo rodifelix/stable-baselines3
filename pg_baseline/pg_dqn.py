@@ -167,6 +167,7 @@ class PGDQN(OffPolicyAlgorithm):
                     self.action_space,
                     self.device,
                     optimize_memory_usage=self.optimize_memory_usage,
+                    save_future_rewards=not self.use_target
                 )
             else:
                 self.replay_buffer.device = self.device
