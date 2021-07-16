@@ -3,15 +3,11 @@ from typing import Any, Callable, Dict, List, Optional, Type, Union
 import gym
 import torch as th
 from torch import nn
-import torchvision
 from collections import OrderedDict
 import numpy as np
-from torch.autograd import Variable
-import torch.nn.functional as F
 from pg_baseline import pg_hourglass, pg_mask_net, pg_densenet
 
 from stable_baselines3.common.policies import BasePolicy, register_policy
-from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, FlattenExtractor, NatureCNN, create_mlp
 
 class PGQNetwork(BasePolicy):
     """
@@ -264,7 +260,7 @@ class VPGNetwork(BasePolicy):
         interm_push_feat = th.cat((interm_push_color_feat, interm_push_depth_feat), dim=1)
 
         # Forward pass through branches, undo rotation on output predictions, upsample results
-        output_prob = nn.Upsample(scale_factor=32, mode='bilinear', align_corners=True).forward(self.pushnet(interm_push_feat))
+        output_prob = nn.Upsample(scale_factor=16, mode='bilinear', align_corners=True).forward(self.pushnet(interm_push_feat))
         return output_prob
 
 
@@ -274,20 +270,7 @@ class VPGNetwork(BasePolicy):
             # Greedy action
             action = q_values.argmax(dim=1).reshape(-1)
         else:
-            actions = th.arange(start=0, end=self.num_rotations*self.heightmap_resolution*self.heightmap_resolution, dtype=th.long).to(self.device)
-            actions = actions.reshape((1, self.num_rotations, self.heightmap_resolution, self.heightmap_resolution))
-
-            masked_actions = self.explore_mask(th.narrow(observation, dim=1, start=3, length=1), actions)
-
-            valid_idx = masked_actions[masked_actions >= 0]
-            if len(valid_idx) > 0:
-                choice = np.random.randint(low=0, high=len(valid_idx))
-                valid_idx = valid_idx.type(th.long)
-                action = valid_idx[choice].reshape(-1)
-            else:
-                print("\n\n No valid actions after mask. Is scene empty? Returning action 0")
-                action = th.zeros([1], device=self.device, dtype=th.int64)
-
+            action = th.as_tensor([self.action_space.sample()], dtype=th.int64)
             print("\n\nExploring in next iteration: Random action index:", action)
         return action
 
@@ -302,27 +285,6 @@ class VPGNetwork(BasePolicy):
             )
         )
         return data
-
-    def explore_mask(self, obs: th.Tensor, output_prob: th.Tensor):
-        threshhold_depth = 0.01
-        depth_min = 0.0
-        depth_max = 0.1
-        threshold_norm = (threshhold_depth - depth_min)/(depth_max - depth_min)
-
-        masked_input = obs > threshold_norm
-        masked_input = masked_input.type(th.float).to(self.device)
-        diluted_mask = th.nn.functional.max_pool2d(input=masked_input,kernel_size=(34,34),stride=(1,1),padding=17)
-
-        diluted_mask = th.narrow(diluted_mask, 2, 1, self.heightmap_resolution)
-        diluted_mask = th.narrow(diluted_mask, 3, 1, self.heightmap_resolution)
-
-        diluted_mask = diluted_mask - 1.
-        diluted_mask = diluted_mask * th.finfo(th.float).max
-
-        #diluted_mask = th.nan_to_num(diluted_mask)
-
-        diluted_mask = th.repeat_interleave(diluted_mask, self.num_rotations, dim=1)
-        return output_prob + diluted_mask
 
 class PGDQNPolicy(BasePolicy):
     """
