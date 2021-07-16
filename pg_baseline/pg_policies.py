@@ -6,7 +6,8 @@ from torch import nn
 from collections import OrderedDict
 import numpy as np
 from pg_baseline import pg_hourglass, pg_mask_net, pg_densenet
-
+from torch.autograd import Variable
+import torch.nn.functional as F
 from stable_baselines3.common.policies import BasePolicy, register_policy
 
 class PGQNetwork(BasePolicy):
@@ -213,7 +214,7 @@ class VPGNetwork(BasePolicy):
             ('push-conv0', nn.Conv2d(2048, 64, kernel_size=1, stride=1, bias=False)),
             ('push-norm1', nn.InstanceNorm2d(64, affine=True)),
             ('push-relu1', nn.ReLU(inplace=True)),
-            ('push-conv1', nn.Conv2d(64, self.num_rotations, kernel_size=1, stride=1, bias=False))
+            ('push-conv1', nn.Conv2d(64, 1, kernel_size=1, stride=1, bias=False))
             # ('push-upsample2', nn.Upsample(scale_factor=4, mode='bilinear'))
         ]))
 
@@ -225,6 +226,14 @@ class VPGNetwork(BasePolicy):
                 elif isinstance(m[1], nn.InstanceNorm2d):
                     m[1].weight.data.fill_(1)
                     m[1].bias.data.zero_()
+
+        diag_length = float(heightmap_resolution*2) * np.sqrt(2)
+        interm_feat_resolution = int(np.ceil(diag_length/32))
+        diag_length = np.ceil(diag_length/32)*32
+        self.padding_width = int((diag_length - heightmap_resolution*2)/2)
+
+        self.flow_grid_before = self._build_flow_grid_before(int(diag_length))
+        self.flow_grid_after = self._build_flow_grid_after((self.num_rotations, self.push_color_trunk.num_output_features, interm_feat_resolution, interm_feat_resolution))
 
     def forward(self, obs: th.Tensor, mask=True) -> th.Tensor:
         """
@@ -241,7 +250,18 @@ class VPGNetwork(BasePolicy):
 
         return th.reshape(output_prob, (batch_size, self.num_rotations*self.heightmap_resolution*self.heightmap_resolution))
 
-    def _forward(self, input_color_data, input_depth_data):
+    def forward_specific_rotations(self, obs: th.Tensor, rotation_indices: th.Tensor):
+        assert obs.shape[0] == rotation_indices.shape[0], "Number of observations does not match number of rotation indices"
+
+        batch_size = obs.shape[0]
+       
+        input_color_data, input_depth_data = th.narrow(obs, 1, 0, 3), th.narrow(obs, 1, 3, 1)
+
+        output_prob = self._forward(input_color_data, input_depth_data, rotation_indices=rotation_indices)
+
+        return th.reshape(output_prob, (batch_size, self.heightmap_resolution*self.heightmap_resolution))
+
+    def _forward(self, input_color_data, input_depth_data, rotation_indices=None):
         """forward pass wrapper for external call
 
         Args:
@@ -254,23 +274,75 @@ class VPGNetwork(BasePolicy):
         #copy depth input to 3-channels
         depth_3_channel = th.repeat_interleave(input_depth_data, 3, dim=1)
 
-        diag_length = float(self.observation_space.shape[1]) * np.sqrt(2)
-        diag_length = np.ceil(diag_length/32)*32
-        padding_width = int((diag_length - self.observation_space.shape[1])/2)
+        padded_color = th.nn.functional.pad(input_color_data, (self.padding_width,self.padding_width,self.padding_width,self.padding_width), mode='constant', value=0)
+        padded_depth = th.nn.functional.pad(depth_3_channel, (self.padding_width,self.padding_width,self.padding_width,self.padding_width), mode='constant', value=0)
 
-        padded_color = th.nn.functional.pad(input_color_data, (padding_width,padding_width,padding_width,padding_width), mode='constant', value=0)
-        padded_depth = th.nn.functional.pad(depth_3_channel, (padding_width,padding_width,padding_width,padding_width), mode='constant', value=0)
+        batch_size = input_color_data.shape[0]
+        if rotation_indices is None:
+            batch_flow_grid_before = self.flow_grid_before.repeat((batch_size, 1, 1, 1))
+            batch_flow_grid_after = self.flow_grid_after.repeat((batch_size, 1, 1, 1))
+            input_color_datas = th.repeat_interleave(padded_color, self.num_rotations, dim=0)
+            input_depth_datas = th.repeat_interleave(padded_depth, self.num_rotations, dim=0)
+        else:
+            batch_flow_grid_before, batch_flow_grid_after = self._get_flow_grids_for_indices(rotation_indices)
+            input_color_datas = padded_color
+            input_depth_datas = padded_depth
+
+        batch_flow_grid_before = batch_flow_grid_before.to(self.device)
+        batch_flow_grid_after = batch_flow_grid_after.to(self.device)
+
+        rotated_color_images = F.grid_sample(Variable(input_color_datas, requires_grad=False).to(self.device), batch_flow_grid_before, mode='nearest')
+        rotated_depth_images = F.grid_sample(Variable(input_depth_datas, requires_grad=False).to(self.device), batch_flow_grid_before, mode='nearest')
         
         # Compute intermediate features
-        interm_push_color_feat = self.push_color_trunk.features(padded_color)
-        interm_push_depth_feat = self.push_depth_trunk.features(padded_depth)
+        interm_push_color_feat = self.push_color_trunk.features(rotated_color_images)
+        interm_push_depth_feat = self.push_depth_trunk.features(rotated_depth_images)
         interm_push_feat = th.cat((interm_push_color_feat, interm_push_depth_feat), dim=1)
 
         # Forward pass through branches, undo rotation on output predictions, upsample results
-        output_prob = nn.Upsample(scale_factor=16, mode='bilinear', align_corners=True).forward(self.pushnet(interm_push_feat))
-        output_prob = th.narrow(output_prob, dim=2, start=int(padding_width/2), length=self.heightmap_resolution)
-        output_prob = th.narrow(output_prob, dim=3, start=int(padding_width/2), length=self.heightmap_resolution)
+        output_prob = nn.Upsample(scale_factor=16, mode='bilinear', align_corners=True).forward(F.grid_sample(self.pushnet(interm_push_feat), batch_flow_grid_after, mode='nearest'))
+        output_prob = th.narrow(output_prob, dim=2, start=int(self.padding_width/2), length=self.heightmap_resolution)
+        output_prob = th.narrow(output_prob, dim=3, start=int(self.padding_width/2), length=self.heightmap_resolution)
         return output_prob
+
+    def _build_flow_grid_after(self, interm_push_feat_size):
+        affine_mat_after = None
+        for rotate_idx in range(self.num_rotations):
+            rotate_theta = np.radians(rotate_idx*(360/self.num_rotations))
+            # Compute sample grid for rotation AFTER branches
+            tmp_mat = np.asarray([[np.cos(rotate_theta), np.sin(rotate_theta), 0], [-np.sin(rotate_theta), np.cos(rotate_theta), 0]])
+            tmp_mat.shape = (2, 3, 1)
+            tmp_mat = th.from_numpy(tmp_mat).permute(2, 0, 1).float()
+
+            if affine_mat_after is None:
+                affine_mat_after = tmp_mat
+            else:
+                affine_mat_after = th.cat((affine_mat_after, tmp_mat), dim=0)
+
+        flow_grid_after = F.affine_grid(Variable(affine_mat_after, requires_grad=False).to(self.device), interm_push_feat_size)
+        return flow_grid_after
+
+    def _build_flow_grid_before(self, diag_length):
+        affine_mat_before = None
+        for rotate_idx in range(self.num_rotations):
+            rotate_theta = np.radians(rotate_idx*(360/self.num_rotations))
+
+            # Compute sample grid for rotation BEFORE neural network
+            tmp_mat = np.asarray([[np.cos(-rotate_theta), np.sin(-rotate_theta), 0], [-np.sin(-rotate_theta), np.cos(-rotate_theta), 0]])
+            tmp_mat.shape = (2, 3, 1)
+            tmp_mat = th.from_numpy(tmp_mat).permute(2, 0, 1).float()
+            if affine_mat_before is None:
+                affine_mat_before = tmp_mat
+            else:
+                affine_mat_before = th.cat((affine_mat_before, tmp_mat), dim=0)
+
+        flow_grid_before = F.affine_grid(Variable(affine_mat_before).to(self.device), (self.num_rotations, 3, diag_length, diag_length))
+        return flow_grid_before
+
+    def _get_flow_grids_for_indices(self, rotation_indices: th.Tensor):
+        flow_grids_before = th.index_select(self.flow_grid_before.to(self.device), dim=0, index=th.squeeze(rotation_indices))
+        flow_grids_after = th.index_select(self.flow_grid_after.to(self.device), dim=0, index=th.squeeze(rotation_indices))
+        return flow_grids_before, flow_grids_after
 
 
     def _predict(self, observation: th.Tensor, deterministic: bool = True) -> th.Tensor:
