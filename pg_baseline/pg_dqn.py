@@ -191,6 +191,7 @@ class PGDQN(OffPolicyAlgorithm):
     def _create_aliases(self) -> None:
         self.q_net = self.policy.q_net
         self.q_net_target = self.policy.q_net_target
+        self.heightmap_resolution = self.q_net.heightmap_resolution
 
     def _on_step(self) -> None:
         """
@@ -259,8 +260,12 @@ class PGDQN(OffPolicyAlgorithm):
                             _, next_max_idx = self.q_net.forward(replay_data.next_observations).max(dim=1)
                             next_max_idx = next_max_idx.reshape(-1, 1)
                             # Evaluate action selected by q-network with target network
-                            target_output = self.q_net_target.forward(replay_data.next_observations, mask=False)
-                            target_q = target_output.gather(dim=1, index=next_max_idx.long())
+                            if self.net_class == "VPG":
+                                target_q = self.q_net_target.forward_specific_rotations(replay_data.next_observations, th.floor_divide(next_max_idx.long(), self.heightmap_resolution*self.heightmap_resolution))
+                                target_q = target_q.gather(dim=1, index=th.remainder(next_max_idx.long(), self.heightmap_resolution*self.heightmap_resolution))
+                            else:
+                                target_output = self.q_net_target.forward(replay_data.next_observations, mask=False)
+                                target_q = target_output.gather(dim=1, index=next_max_idx.long())
                         else:
                             # Evaluate action selected by target network with target network
                             target_output = self.q_net_target.forward(replay_data.next_observations, mask=True)
@@ -279,7 +284,7 @@ class PGDQN(OffPolicyAlgorithm):
             # Get current Q 
             # forward type, batch_size images, each with one specific rotation 
             if self.net_class == "VPG":
-                current_q = q_net.forward_specific_rotations(replay_data.observations,  th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
+                current_q = self.q_net.forward_specific_rotations(replay_data.observations,  th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
                 current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
             else:
                 current_q = self.q_net.forward(replay_data.observations, mask=False)
