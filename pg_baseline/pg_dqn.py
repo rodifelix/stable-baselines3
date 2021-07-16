@@ -167,6 +167,7 @@ class PGDQN(OffPolicyAlgorithm):
                     self.action_space,
                     self.device,
                     optimize_memory_usage=self.optimize_memory_usage,
+                    save_future_rewards=not self.use_target
                 )
             else:
                 self.replay_buffer.device = self.device
@@ -191,6 +192,7 @@ class PGDQN(OffPolicyAlgorithm):
     def _create_aliases(self) -> None:
         self.q_net = self.policy.q_net
         self.q_net_target = self.policy.q_net_target
+        self.heightmap_resolution = self.q_net.heightmap_resolution
 
     def _on_step(self) -> None:
         """
@@ -254,20 +256,24 @@ class PGDQN(OffPolicyAlgorithm):
 
             with th.no_grad():
                 if self.gamma > 0:
-                    next_max, next_max_idx = self.q_net.forward(replay_data.next_observations).max(dim=1)
-                    next_max_idx = next_max_idx.reshape(-1, 1)
                     if self.use_target:
                         if self.use_double_q:
+                            _, next_max_idx = self.q_net.forward(replay_data.next_observations).max(dim=1)
+                            next_max_idx = next_max_idx.reshape(-1, 1)
                             # Evaluate action selected by q-network with target network
-                            target_output = self.q_net_target.forward(replay_data.next_observations, mask=False)
-                            target_q = target_output.gather(dim=1, index=next_max_idx.long())
+                            if self.net_class == "VPG":
+                                target_q = self.q_net_target.forward_specific_rotations(replay_data.next_observations, th.floor_divide(next_max_idx.long(), self.heightmap_resolution*self.heightmap_resolution))
+                                target_q = target_q.gather(dim=1, index=th.remainder(next_max_idx.long(), self.heightmap_resolution*self.heightmap_resolution))
+                            else:
+                                target_output = self.q_net_target.forward(replay_data.next_observations, mask=False)
+                                target_q = target_output.gather(dim=1, index=next_max_idx.long())
                         else:
                             # Evaluate action selected by target network with target network
                             target_output = self.q_net_target.forward(replay_data.next_observations, mask=True)
                             target_q, _ = target_output.max(dim=1)
                     else:
-                        # Evaluate action selected by q-network with q-network
-                        target_q = next_max
+                        # Get future reward from replay buffer
+                        target_q = replay_data.future_rewards
 
                     # Avoid potential broadcast issue
                     target_q = target_q.reshape(-1, 1)
@@ -276,14 +282,12 @@ class PGDQN(OffPolicyAlgorithm):
                 else:
                     target_q = replay_data.rewards
 
-            # Get current Q 
-            # forward type, batch_size images, each with one specific rotation 
             if self.net_class == "VPG":
-                current_q = q_net.forward_specific_rotations(replay_data.observations,  th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
+                # forward type, batch_size images, each with one specific rotation 
+                current_q = self.q_net.forward_specific_rotations(replay_data.observations,  th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
                 current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
             else:
                 current_q = self.q_net.forward(replay_data.observations, mask=False)
-                # Retrieve the q-values for the actions from the replay buffer
                 current_q = th.gather(current_q, dim=1, index=replay_data.actions.long())
 
             new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
@@ -466,7 +470,15 @@ class PGDQN(OffPolicyAlgorithm):
                         # Avoid changing the original ones
                         self._last_original_obs, new_obs_, reward_ = self._last_obs, new_obs, reward
 
-                    replay_buffer.add(self._last_original_obs, infos[0]["terminal_observation"].detach().cpu().numpy() if done else new_obs_, buffer_action, reward_, infos[0]["change"], done)
+                    next_obs = infos[0]["terminal_observation"].detach().cpu().numpy() if done else new_obs_
+
+                    if not self.use_target:
+                        with th.no_grad():
+                            future_reward = self.q_net.forward(th.Tensor(next_obs, device=self.device)).max(dim=1)[0].detach().cpu().numpy()
+                    else:
+                        future_reward = None
+
+                    replay_buffer.add(self._last_original_obs, next_obs, buffer_action, reward_, infos[0]["change"], done, future_reward)
 
                 self._last_obs = new_obs
                 # Save the unnormalized observation

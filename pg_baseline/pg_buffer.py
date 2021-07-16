@@ -24,6 +24,16 @@ class PGBufferSamples(NamedTuple):
     rewards: th.Tensor
     iterations: th.Tensor
 
+class PGBufferSamplesWithFutures(NamedTuple):
+    observations: th.Tensor
+    actions: th.Tensor
+    next_observations: th.Tensor
+    dones: th.Tensor
+    change: th.Tensor
+    completes: th.Tensor
+    rewards: th.Tensor
+    iterations: th.Tensor
+    future_rewards: th.Tensor
 
 class PGBuffer(ReplayBuffer):
     """
@@ -48,6 +58,7 @@ class PGBuffer(ReplayBuffer):
         device: Union[th.device, str] = "cpu",
         n_envs: int = 1,
         optimize_memory_usage: bool = False,
+        save_future_rewards: bool = False,
     ):
         super(ReplayBuffer, self).__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
 
@@ -74,8 +85,15 @@ class PGBuffer(ReplayBuffer):
         self.iteration = np.zeros((self.buffer_size, self.n_envs), dtype=np.int32)
         self.iteration_offset = 0
 
+        self.save_future_rewards = save_future_rewards
+        if self.save_future_rewards:
+            self.future_reward = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
+
         if psutil is not None:
-            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.completes.nbytes + self.change.nbytes
+            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.completes.nbytes + self.change.nbytes + self.future_reward.nbytes
+            if self.save_future_rewards:
+                total_memory_usage += self.future_reward.nbytes
+
             if self.next_observations is not None:
                 total_memory_usage += self.next_observations.nbytes
 
@@ -88,7 +106,7 @@ class PGBuffer(ReplayBuffer):
                     f"replay buffer {total_memory_usage:.2f}GB > {mem_available:.2f}GB"
                 )
 
-    def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: bool, done: np.ndarray) -> None:
+    def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: bool, done: np.ndarray, future_reward: np.ndarray = None) -> None:
         # Copy to avoid modification by reference
         self.observations[self.pos] = np.array(obs).copy()
         if self.optimize_memory_usage:
@@ -102,6 +120,9 @@ class PGBuffer(ReplayBuffer):
         self.completes[self.pos] = np.array(reward > 10).copy()
         self.change[self.pos] = np.array(change)
         self.iteration[self.pos] = [self.iteration_offset*self.buffer_size + self.pos]
+
+        if self.save_future_reward and future_reward is not None:
+            self.future_reward[self.pos] = np.array(future_reward).copy()
 
         self.pos += 1
         if self.pos == self.buffer_size:
@@ -160,17 +181,31 @@ class PGBuffer(ReplayBuffer):
         else:
             next_obs = self._normalize_obs(self.next_observations[batch_inds, 0, :], env)
 
-        data = (
-            self._normalize_obs(self.observations[batch_inds, 0, :], env),
-            self.actions[batch_inds, 0, :],
-            next_obs,
-            self.dones[batch_inds],
-            self.change[batch_inds],
-            self.completes[batch_inds],
-            self._normalize_reward(self.rewards[batch_inds], env),
-            self.iteration[batch_inds]
-        )
-        return PGBufferSamples(*tuple(map(self.to_torch, data)))
+        if self.save_future_rewards:
+            data = (
+                self._normalize_obs(self.observations[batch_inds, 0, :], env),
+                self.actions[batch_inds, 0, :],
+                next_obs,
+                self.dones[batch_inds],
+                self.change[batch_inds],
+                self.completes[batch_inds],
+                self._normalize_reward(self.rewards[batch_inds], env),
+                self.iteration[batch_inds],
+                self.future_reward[batch_inds]
+            )
+            return PGBufferSamplesWithFutures(*tuple(map(self.to_torch, data)))
+        else:
+            data = (
+                self._normalize_obs(self.observations[batch_inds, 0, :], env),
+                self.actions[batch_inds, 0, :],
+                next_obs,
+                self.dones[batch_inds],
+                self.change[batch_inds],
+                self.completes[batch_inds],
+                self._normalize_reward(self.rewards[batch_inds], env),
+                self.iteration[batch_inds]
+            )
+            return PGBufferSamples(*tuple(map(self.to_torch, data)))
 
     def update_sample_surprise_values(self, new_values: np.ndarray):
         assert len(new_values) == len(self.save_indices), "Amount of saved indices and provided amount of new values not the same"
