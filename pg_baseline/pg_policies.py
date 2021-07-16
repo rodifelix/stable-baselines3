@@ -253,14 +253,23 @@ class VPGNetwork(BasePolicy):
         """
         #copy depth input to 3-channels
         depth_3_channel = th.repeat_interleave(input_depth_data, 3, dim=1)
+
+        diag_length = float(self.observation_space.shape[1]) * np.sqrt(2)
+        diag_length = np.ceil(diag_length/32)*32
+        padding_width = int((diag_length - self.observation_space.shape[1])/2)
+
+        padded_color = th.nn.functional.pad(input_color_data, (padding_width,padding_width,padding_width,padding_width), mode='constant', value=0)
+        padded_depth = th.nn.functional.pad(depth_3_channel, (padding_width,padding_width,padding_width,padding_width), mode='constant', value=0)
         
         # Compute intermediate features
-        interm_push_color_feat = self.push_color_trunk.features(input_color_data)
-        interm_push_depth_feat = self.push_depth_trunk.features(depth_3_channel)
+        interm_push_color_feat = self.push_color_trunk.features(padded_color)
+        interm_push_depth_feat = self.push_depth_trunk.features(padded_depth)
         interm_push_feat = th.cat((interm_push_color_feat, interm_push_depth_feat), dim=1)
 
         # Forward pass through branches, undo rotation on output predictions, upsample results
         output_prob = nn.Upsample(scale_factor=16, mode='bilinear', align_corners=True).forward(self.pushnet(interm_push_feat))
+        output_prob = th.narrow(output_prob, dim=2, start=int(padding_width/2), length=self.heightmap_resolution)
+        output_prob = th.narrow(output_prob, dim=3, start=int(padding_width/2), length=self.heightmap_resolution)
         return output_prob
 
 
