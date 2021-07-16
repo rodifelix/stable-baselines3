@@ -91,7 +91,7 @@ class PGBuffer(ReplayBuffer):
                     f"replay buffer {total_memory_usage:.2f}GB > {mem_available:.2f}GB"
                 )
 
-    def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: bool, done: np.ndarray, future_reward: np.ndarray) -> None:
+    def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: bool, done: np.ndarray, future_reward: np.ndarray = None) -> None:
         # Copy to avoid modification by reference
         self.observations[self.pos] = np.array(obs).copy()
         if self.optimize_memory_usage:
@@ -106,7 +106,8 @@ class PGBuffer(ReplayBuffer):
         self.change[self.pos] = np.array(change)
         self.iteration[self.pos] = [self.iteration_offset*self.buffer_size + self.pos]
 
-        self.future_reward[self.pos] = np.array(future_reward).copy()
+        if future_reward is not None:
+            self.future_reward[self.pos] = np.array(future_reward).copy()
 
         self.pos += 1
         if self.pos == self.buffer_size:
