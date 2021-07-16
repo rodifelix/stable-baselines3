@@ -282,14 +282,12 @@ class PGDQN(OffPolicyAlgorithm):
                 else:
                     target_q = replay_data.rewards
 
-            # Get current Q 
-            # forward type, batch_size images, each with one specific rotation 
             if self.net_class == "VPG":
+                # forward type, batch_size images, each with one specific rotation 
                 current_q = self.q_net.forward_specific_rotations(replay_data.observations,  th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
                 current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
             else:
                 current_q = self.q_net.forward(replay_data.observations, mask=False)
-                # Retrieve the q-values for the actions from the replay buffer
                 current_q = th.gather(current_q, dim=1, index=replay_data.actions.long())
 
             new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
