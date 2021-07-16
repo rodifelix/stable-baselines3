@@ -227,10 +227,10 @@ class VPGNetwork(BasePolicy):
                     m[1].weight.data.fill_(1)
                     m[1].bias.data.zero_()
 
-        diag_length = float(heightmap_resolution*2) * np.sqrt(2)
+        diag_length = float(observation_space.shape[1]) * np.sqrt(2)
         interm_feat_resolution = int(np.ceil(diag_length/32))
         diag_length = np.ceil(diag_length/32)*32
-        self.padding_width = int((diag_length - heightmap_resolution*2)/2)
+        self.padding_width = int((diag_length - observation_space.shape[1])/2)
 
         self.flow_grid_before = self._build_flow_grid_before(int(diag_length))
         self.flow_grid_after = self._build_flow_grid_after((self.num_rotations, self.push_color_trunk.num_output_features, interm_feat_resolution, interm_feat_resolution))
