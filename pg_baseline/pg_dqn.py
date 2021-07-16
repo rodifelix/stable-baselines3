@@ -254,10 +254,10 @@ class PGDQN(OffPolicyAlgorithm):
 
             with th.no_grad():
                 if self.gamma > 0:
-                    next_max, next_max_idx = self.q_net.forward(replay_data.next_observations).max(dim=1)
-                    next_max_idx = next_max_idx.reshape(-1, 1)
                     if self.use_target:
                         if self.use_double_q:
+                            _, next_max_idx = self.q_net.forward(replay_data.next_observations).max(dim=1)
+                            next_max_idx = next_max_idx.reshape(-1, 1)
                             # Evaluate action selected by q-network with target network
                             target_output = self.q_net_target.forward(replay_data.next_observations, mask=False)
                             target_q = target_output.gather(dim=1, index=next_max_idx.long())
@@ -266,8 +266,8 @@ class PGDQN(OffPolicyAlgorithm):
                             target_output = self.q_net_target.forward(replay_data.next_observations, mask=True)
                             target_q, _ = target_output.max(dim=1)
                     else:
-                        # Evaluate action selected by q-network with q-network
-                        target_q = next_max
+                        # Get future reward from replay buffer
+                        target_q = replay_data.future_rewards
 
                     # Avoid potential broadcast issue
                     target_q = target_q.reshape(-1, 1)
@@ -466,7 +466,12 @@ class PGDQN(OffPolicyAlgorithm):
                         # Avoid changing the original ones
                         self._last_original_obs, new_obs_, reward_ = self._last_obs, new_obs, reward
 
-                    replay_buffer.add(self._last_original_obs, infos[0]["terminal_observation"].detach().cpu().numpy() if done else new_obs_, buffer_action, reward_, infos[0]["change"], done)
+                    next_obs = infos[0]["terminal_observation"].detach().cpu().numpy() if done else new_obs_
+
+                    with th.no_grad():
+                        future_reward = self.q_net.forward(th.Tensor(next_obs, device=self.device)).max(dim=1)[0].detach().cpu().numpy()
+
+                    replay_buffer.add(self._last_original_obs, next_obs, buffer_action, reward_, infos[0]["change"], done, future_reward)
 
                 self._last_obs = new_obs
                 # Save the unnormalized observation

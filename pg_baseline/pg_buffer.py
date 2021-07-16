@@ -23,6 +23,7 @@ class PGBufferSamples(NamedTuple):
     completes: th.Tensor
     rewards: th.Tensor
     iterations: th.Tensor
+    future_rewards: th.Tensor
 
 
 class PGBuffer(ReplayBuffer):
@@ -73,9 +74,11 @@ class PGBuffer(ReplayBuffer):
         self.save_indices = []
         self.iteration = np.zeros((self.buffer_size, self.n_envs), dtype=np.int32)
         self.iteration_offset = 0
+        self.future_reward = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
 
         if psutil is not None:
-            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.completes.nbytes + self.change.nbytes
+            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.completes.nbytes + self.change.nbytes + self.future_reward.nbytes
+            
             if self.next_observations is not None:
                 total_memory_usage += self.next_observations.nbytes
 
@@ -88,7 +91,7 @@ class PGBuffer(ReplayBuffer):
                     f"replay buffer {total_memory_usage:.2f}GB > {mem_available:.2f}GB"
                 )
 
-    def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: bool, done: np.ndarray) -> None:
+    def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: bool, done: np.ndarray, future_reward: np.ndarray) -> None:
         # Copy to avoid modification by reference
         self.observations[self.pos] = np.array(obs).copy()
         if self.optimize_memory_usage:
@@ -102,6 +105,8 @@ class PGBuffer(ReplayBuffer):
         self.completes[self.pos] = np.array(reward > 10).copy()
         self.change[self.pos] = np.array(change)
         self.iteration[self.pos] = [self.iteration_offset*self.buffer_size + self.pos]
+
+        self.future_reward[self.pos] = np.array(future_reward).copy()
 
         self.pos += 1
         if self.pos == self.buffer_size:
@@ -168,7 +173,8 @@ class PGBuffer(ReplayBuffer):
             self.change[batch_inds],
             self.completes[batch_inds],
             self._normalize_reward(self.rewards[batch_inds], env),
-            self.iteration[batch_inds]
+            self.iteration[batch_inds],
+            self.future_reward[batch_inds]
         )
         return PGBufferSamples(*tuple(map(self.to_torch, data)))
 
