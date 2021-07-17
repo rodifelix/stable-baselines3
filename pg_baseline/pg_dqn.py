@@ -227,18 +227,20 @@ class PGDQN(OffPolicyAlgorithm):
         logger.record("rollout/exploration rate", self.exploration_rate)
 
     def train(self, gradient_steps: int, batch_size: int = 100) -> None:
-        # Update learning rate according to schedule
         if self.num_timesteps < self.trainings_starts:
             replay_data = self.replay_buffer.sample(1, env=self._vec_normalize_env)
-            with th.no_grad():            
-                target_q = replay_data.rewards
+            with th.no_grad():
+                if self.use_target:           
+                    target_q = replay_data.rewards
+                else:
+                    target_q = replay_data.rewards + (1 - replay_data.completes) * self.gamma * replay_data.future_rewards
 
-                # Get current Q 
-                # forward type, batch_size images, each with one specific rotation 
-                current_q = self.q_net.forward(replay_data.observations, mask=False)
-
-                # Retrieve the q-values for the actions from the replay buffer
-                current_q = th.gather(current_q, dim=1, index=replay_data.actions.long())
+                if self.net_class == "VPG":
+                    current_q = self.q_net.forward_specific_rotations(replay_data.observations,  th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
+                    current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
+                else:
+                    current_q = self.q_net.forward(replay_data.observations, mask=False)
+                    current_q = th.gather(current_q, dim=1, index=replay_data.actions.long())
 
                 new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
                 self.replay_buffer.update_sample_surprise_values(new_surprise_values)
@@ -292,10 +294,6 @@ class PGDQN(OffPolicyAlgorithm):
 
             new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
             self.replay_buffer.update_sample_surprise_values(new_surprise_values)
-
-            # Compute Huber loss (less sensitive to outliers)
-            if th.any(current_q < (th.finfo(th.float).min/2)) or th.any(target_q < (th.finfo(th.float).min/2)):
-                print("Backprop over invalid numbers!!!!")
 
             loss = self.loss_function(current_q, target_q)
             losses.append(loss.item())
