@@ -121,7 +121,7 @@ class PGBuffer(ReplayBuffer):
         self.change[self.pos] = np.array(change)
         self.iteration[self.pos] = [self.iteration_offset*self.buffer_size + self.pos]
 
-        if self.save_future_reward and future_reward is not None:
+        if self.save_future_rewards and future_reward is not None:
             self.future_reward[self.pos] = np.array(future_reward).copy()
 
         self.pos += 1
