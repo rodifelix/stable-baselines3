@@ -137,7 +137,8 @@ class PGQNetwork(BasePolicy):
                 heightmap_resolution=self.heightmap_resolution,
                 num_rotations=self.num_rotations,
                 ucb_confidence=self.ucb_confidence,
-                preload_mask_path=self.preload_mask_path         
+                preload_mask_path=self.preload_mask_path,
+                use_masknet=self.use_masknet,         
             )
         )
         return data
@@ -190,7 +191,7 @@ class VPGNetwork(BasePolicy):
         action_space: gym.spaces.Space,
         heightmap_resolution: int,
         num_rotations: int,
-        ucb_confidence: float,
+        ucb_confidence: float = 0,
 
     ):
         super(VPGNetwork, self).__init__(
@@ -362,7 +363,6 @@ class VPGNetwork(BasePolicy):
             dict(
                 heightmap_resolution=self.heightmap_resolution,
                 num_rotations=self.num_rotations,
-                ucb_confidence=self.ucb_confidence,
             )
         )
         return data
@@ -418,6 +418,7 @@ class PGDQNPolicy(BasePolicy):
         self.ucb_confidence = ucb_confidence
         self.use_target = use_target
         self.net_class = net_class
+        self.preload_mask_path = preload_mask_path
 
         self.net_args = {
             "observation_space": self.observation_space,
@@ -427,7 +428,7 @@ class PGDQNPolicy(BasePolicy):
             "ucb_confidence": self.ucb_confidence,
         }
         if self.net_class == "HG_Mask":
-            self.net_args["preload_mask_path"] = preload_mask_path
+            self.net_args["preload_mask_path"] = self.preload_mask_path
             self.net_args["use_masknet"] = True
         elif self.net_class == "HG":
             self.net_args["preload_mask_path"] = None
@@ -484,6 +485,9 @@ class PGDQNPolicy(BasePolicy):
                 optimizer_class=self.optimizer_class,
                 optimizer_kwargs=self.optimizer_kwargs,
                 use_target=self.use_target,
+                net_class=self.net_class,
+                ucb_confidence=self.ucb_confidence,
+                preload_mask_path=self.preload_mask_path,
             )
         )
         return data
