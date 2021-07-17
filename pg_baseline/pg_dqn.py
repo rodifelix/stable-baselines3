@@ -503,7 +503,7 @@ class PGDQN(OffPolicyAlgorithm):
 
                     if not self.use_target:
                         with th.no_grad():
-                            future_reward = self.q_net.forward(th.Tensor(next_obs, device=self.device)).max(dim=1)[0].detach().cpu().numpy()
+                            future_reward = self.q_net.forward(th.tensor(next_obs, device=self.device)).max(dim=1)[0].detach().cpu().numpy()
                     else:
                         future_reward = None
 
