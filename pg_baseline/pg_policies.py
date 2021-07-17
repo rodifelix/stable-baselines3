@@ -10,7 +10,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from stable_baselines3.common.policies import BasePolicy, register_policy
 
-class PGQNetwork(BasePolicy):
+class HGNetwork(BasePolicy):
     """
     Action-Value (Q-Value) network for DQN
     :param observation_space: Observation space
@@ -30,7 +30,7 @@ class PGQNetwork(BasePolicy):
         use_masknet: bool,
         preload_mask_path: Optional[str],
     ):
-        super(PGQNetwork, self).__init__(
+        super(HGNetwork, self).__init__(
             observation_space,
             action_space,
             normalize_images=False,
@@ -458,12 +458,9 @@ class PGDQNPolicy(BasePolicy):
             self.optimizer = self.optimizer_class(self.q_net.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
 
-    def make_q_net(self) -> PGQNetwork:
-        #TODO: DO WE NEED THIS?
-        # Make sure we always have separate networks for features extractors etc
-        # net_args = self._update_features_extractor(self.net_args, features_extractor=None)
+    def make_q_net(self) -> BasePolicy:
         if self.net_class == "HG" or self.net_class == "HG_Mask":
-            return PGQNetwork(**self.net_args).to(self.device)
+            return HGNetwork(**self.net_args).to(self.device)
         elif self.net_class == "VPG":
             return VPGNetwork(**self.net_args).to(self.device)
 
@@ -486,7 +483,6 @@ class PGDQNPolicy(BasePolicy):
                 optimizer_kwargs=self.optimizer_kwargs,
                 use_target=self.use_target,
                 net_class=self.net_class,
-                ucb_confidence=self.ucb_confidence,
                 preload_mask_path=self.preload_mask_path,
             )
         )
