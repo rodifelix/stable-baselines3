@@ -256,81 +256,112 @@ class PGDQN(OffPolicyAlgorithm):
             # Sample replay buffer
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
 
-            with th.no_grad():
-                if self.gamma > 0:
-                    if self.use_target:
-                        if self.use_double_q:
-                            _, next_max_idx = self.q_net.forward(replay_data.next_observations).max(dim=1)
-                            next_max_idx = next_max_idx.reshape(-1, 1)
-                            # Evaluate action selected by q-network with target network
-                            if self.net_class == "VPG":
-                                target_q = self.q_net_target.forward_specific_rotations(replay_data.next_observations, th.floor_divide(next_max_idx.long(), self.heightmap_resolution*self.heightmap_resolution))
-                                target_q = target_q.gather(dim=1, index=th.remainder(next_max_idx.long(), self.heightmap_resolution*self.heightmap_resolution))
-                            else:
-                                target_output = self.q_net_target.forward(replay_data.next_observations, mask=False)
-                                target_q = target_output.gather(dim=1, index=next_max_idx.long())
-                        else:
-                            # Evaluate action selected by target network with target network
-                            target_output = self.q_net_target.forward(replay_data.next_observations, mask=True)
-                            target_q, _ = target_output.max(dim=1)
-                    else:
-                        # Get future reward from replay buffer
-                        target_q = replay_data.future_rewards
+            future_rewards = None
+            if not self.use_target:
+                future_rewards = replay_data.future_rewards
 
-                    # Avoid potential broadcast issue
-                    target_q = target_q.reshape(-1, 1)
-                    # 1-step TD target
-                    target_q = replay_data.rewards + (1 - replay_data.completes) * self.gamma * target_q
-                else:
-                    target_q = replay_data.rewards
-
-            if self.net_class == "VPG":
-                # forward type, batch_size images, each with one specific rotation 
-                current_q = self.q_net.forward_specific_rotations(replay_data.observations,  th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
-                current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
-            else:
-                current_q = self.q_net.forward(replay_data.observations, mask=False)
-                current_q = th.gather(current_q, dim=1, index=replay_data.actions.long())
-
-            new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
-            self.replay_buffer.update_sample_surprise_values(new_surprise_values)
-
-            loss = self.loss_function(current_q, target_q)
-            losses.append(loss.item())
-
-            # Optimize the policy
-            self.policy.optimizer.zero_grad()
-            loss.backward()
-            # Clip gradient norm
-            if self.net_class == "HG_Mask":
-                th.nn.utils.clip_grad_norm_(self.policy.q_net.net.parameters(), self.max_grad_norm)
-            else:
-                th.nn.utils.clip_grad_norm_(self.policy.q_net.parameters(), self.max_grad_norm)
-
-            self.policy.optimizer.step()
-
-            if self.update_mask:
-                mask = self.q_net.mask(replay_data.observations)
-                
-                predictions = th.gather(mask, dim=1, index=replay_data.actions.long())
-
-                labels = replay_data.change
-
-                mask_loss = F.binary_cross_entropy(predictions, labels)
-
-                self.policy.mask_optimizer.zero_grad()
-                mask_loss.backward()
-                # Clip gradient norm
-                th.nn.utils.clip_grad_norm_(self.policy.q_net.mask_net.parameters(), self.max_grad_norm)
-                self.policy.mask_optimizer.step()
+            target_q, current_q = self.backward_step(observations=replay_data.observations,
+                                                    actions=replay_data.actions,
+                                                    next_observations=replay_data.next_observations,
+                                                    rewards=replay_data.rewards,
+                                                    change=replay_data.change,
+                                                    completes=replay_data.completes,
+                                                    future_rewards=future_rewards, 
+                                                    losses=losses)
 
             np.add.at(self.train_counter, replay_data.iterations.cpu(), 1)
+            new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
+            self.replay_buffer.update_sample_surprise_values(new_surprise_values)
 
         # Increase update counter
         self._n_updates += gradient_steps
 
         logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
         logger.record("train/loss", np.mean(losses))
+
+    def backward_step(self, observations, actions, next_observations, rewards, change, completes, future_rewards, losses=None):
+        with th.no_grad():
+            if self.gamma > 0:
+                if self.use_target:
+                    if self.use_double_q:
+                        _, next_max_idx = self.q_net.forward(next_observations).max(dim=1)
+                        next_max_idx = next_max_idx.reshape(-1, 1)
+                            # Evaluate action selected by q-network with target network
+                        if self.net_class == "VPG":
+                            target_q = self.q_net_target.forward_specific_rotations(next_observations, th.floor_divide(next_max_idx.long(), self.heightmap_resolution*self.heightmap_resolution))
+                            target_q = target_q.gather(dim=1, index=th.remainder(next_max_idx.long(), self.heightmap_resolution*self.heightmap_resolution))
+                        else:
+                            target_output = self.q_net_target.forward(next_observations, mask=False)
+                            target_q = target_output.gather(dim=1, index=next_max_idx.long())
+                    else:
+                            # Evaluate action selected by target network with target network
+                        target_output = self.q_net_target.forward(next_observations, mask=True)
+                        target_q, _ = target_output.max(dim=1)
+                else:
+                        # Get future reward from replay buffer
+                    target_q = future_rewards
+
+                    # Avoid potential broadcast issue
+                target_q = target_q.reshape(-1, 1)
+                    # 1-step TD target
+                target_q = rewards + (1 - completes) * self.gamma * target_q
+            else:
+                target_q = rewards
+
+        if self.net_class == "VPG":
+                # forward type, batch_size images, each with one specific rotation 
+            current_q = self.q_net.forward_specific_rotations(observations,  th.floor_divide(actions.long(), self.heightmap_resolution*self.heightmap_resolution))
+            current_q = th.gather(current_q, dim=1, index=th.remainder(actions.long(), self.heightmap_resolution*self.heightmap_resolution))
+        else:
+            current_q = self.q_net.forward(observations, mask=False)
+            current_q = th.gather(current_q, dim=1, index=actions.long())
+
+        loss = self.loss_function(current_q, target_q)
+        if losses is not None:
+            losses.append(loss.item())
+
+            # Optimize the policy
+        self.policy.optimizer.zero_grad()
+        loss.backward()
+            # Clip gradient norm
+        if self.net_class == "HG_Mask":
+            th.nn.utils.clip_grad_norm_(self.policy.q_net.net.parameters(), self.max_grad_norm)
+        else:
+            th.nn.utils.clip_grad_norm_(self.policy.q_net.parameters(), self.max_grad_norm)
+
+        self.policy.optimizer.step()
+
+        if self.update_mask:
+            mask = self.q_net.mask(observations)
+                
+            predictions = th.gather(mask, dim=1, index=actions.long())
+
+            labels = change
+
+            mask_loss = F.binary_cross_entropy(predictions, labels)
+
+            self.policy.mask_optimizer.zero_grad()
+            mask_loss.backward()
+                # Clip gradient norm
+            th.nn.utils.clip_grad_norm_(self.policy.q_net.mask_net.parameters(), self.max_grad_norm)
+            self.policy.mask_optimizer.step()
+        return target_q,current_q
+
+    def testing_backward(self, observation, action, next_observation, reward, change, complete):
+        future_reward = None
+        with th.no_grad():
+            if self.gamma > 0:
+                if not self.use_target:
+                    future_reward = self.q_net.forward(next_observation.to(self.device)).max(dim=1)[0].reshape(-1, 1)                    
+        
+        self.backward_step(observations=observation.to(self.device),
+                            actions=action.to(self.device),
+                            next_observations=next_observation.to(self.device),
+                            rewards=th.tensor(reward).reshape(-1, 1).to(self.device),
+                            change = th.tensor(change, dtype=th.float).reshape(-1, 1).to(self.device),
+                            completes=th.tensor(complete, dtype=th.float).reshape(-1, 1).to(self.device),
+                            future_rewards=future_reward)
+                
 
     def predict(
         self,
@@ -523,66 +554,4 @@ class PGDQN(OffPolicyAlgorithm):
             state_dicts += ["policy.mask_optimizer"]
 
         return state_dicts, []
-
-    def backward(self, obs, next_obs, action, reward, complete, change, update_mask):
-        with th.no_grad():
-            if self.gamma > 0:
-                next_max, next_max_idx = self.q_net.forward(next_obs).max(dim=1)
-                next_max_idx = next_max_idx.reshape(-1, 1)
-                if self.use_target:
-                    if self.use_double_q:
-                        # Evaluate action selected by q-network with target network
-                        target_output = self.q_net_target.forward(next_obs, mask=False)
-                        target_q = target_output.gather(dim=1, index=next_max_idx.long())
-                    else:
-                        # Evaluate action selected by target network with target network
-                        target_output = self.q_net_target.forward(next_obs, mask=True)
-                        target_q, _ = target_output.max(dim=1)
-                else:
-                    # Evaluate action selected by q-network with q-network
-                    target_q = next_max
-
-                # Avoid potential broadcast issue
-                target_q = target_q.reshape(-1, 1)
-                # 1-step TD target
-                target_q = reward + (1 - complete) * self.gamma * target_q
-            else:
-                target_q = th.Tensor([[reward]]).to(self.device)
-
-        action = action.unsqueeze(0)
-        # Get current Q 
-        # forward type, batch_size images, each with one specific rotation 
-        current_q = self.q_net.forward(obs, mask=False)
-
-        # Retrieve the q-values for the actions from the replay buffer
-        current_q = th.gather(current_q, dim=1, index=action)
-
-        # Compute Huber loss (less sensitive to outliers)
-        loss = self.loss_function(current_q, target_q)
-
-        # Optimize the policy
-        self.policy.optimizer.zero_grad()
-        loss.backward()
-        # Clip gradient norm
-        if self.net_class == "HG_Mask":
-            th.nn.utils.clip_grad_norm_(self.policy.q_net.net.parameters(), self.max_grad_norm)
-        else:
-            th.nn.utils.clip_grad_norm_(self.policy.q_net.parameters(), self.max_grad_norm)
-
-        self.policy.optimizer.step()
-
-        if update_mask:
-                mask = self.q_net.mask(obs)
-                
-                predictions = th.gather(mask, dim=1, index=action)
-
-                labels = th.Tensor([[change]]).float().to(self.device)
-
-                mask_loss = F.binary_cross_entropy(predictions, labels)
-
-                self.policy.mask_optimizer.zero_grad()
-                mask_loss.backward()
-                # Clip gradient norm
-                th.nn.utils.clip_grad_norm_(self.policy.q_net.mask_net.parameters(), self.max_grad_norm)
-                self.policy.mask_optimizer.step()
 
