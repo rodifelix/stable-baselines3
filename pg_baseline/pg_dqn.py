@@ -489,11 +489,10 @@ class PGDQN(OffPolicyAlgorithm):
 
                     next_obs = infos[0]["terminal_observation"].detach().cpu().numpy() if done else new_obs_
 
+                    future_reward = None
                     if not self.use_target:
                         with th.no_grad():
                             future_reward = self.q_net.forward(th.tensor(next_obs, device=self.device)).max(dim=1)[0].detach().cpu().numpy()
-                    else:
-                        future_reward = None
 
                     replay_buffer.add(self._last_original_obs, next_obs, buffer_action, reward_, infos[0]["change"], done, future_reward)
 
