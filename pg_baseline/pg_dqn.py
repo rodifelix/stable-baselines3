@@ -207,21 +207,9 @@ class PGDQN(OffPolicyAlgorithm):
         if self.num_timesteps == 1:
             self.save(os.path.join(self.tensorboard_log, '..', "pqn_start.zip"))
 
-        if self.num_timesteps == self.target_update_interval:
-            self.save(os.path.join(self.tensorboard_log, '..', "pqn_first_update.zip"))
-
-        if self.num_timesteps == self.target_update_interval*2:
-            self.save(os.path.join(self.tensorboard_log, '..', "pqn_second_update.zip"))
-
-        if self.num_timesteps == self._total_timesteps/4:
-            self.save(os.path.join(self.tensorboard_log, '..', "pqn_quarter.zip"))
-
         if self.num_timesteps == self._total_timesteps/2:
             print("Saving model with replay buffer at halfway mark")
             self.save(os.path.join(self.tensorboard_log, '..', "pqn_halfway.zip"), include=["replay_buffer"])
-
-        if self.num_timesteps == self._total_timesteps*3/4:
-            self.save(os.path.join(self.tensorboard_log, '..', "pqn_three_quarter.zip"))
 
         self.exploration_rate = self.exploration_schedule(self._current_progress_remaining)
         logger.record("rollout/exploration rate", self.exploration_rate)
