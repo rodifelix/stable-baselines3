@@ -46,12 +46,12 @@ class HGNetwork(BasePolicy):
 
         self.net = pg_hourglass.Push_Into_Box_Net(params)
 
-        self.action_counter = np.ones((self.num_rotations), dtype=np.int)
-
         self.ucb_confidence = ucb_confidence
 
-        self.timestep = 1
-    
+        if self.ucb_confidence > 0:
+            self.timestep = 1
+            self.action_counter = np.ones((self.num_rotations), dtype=np.int)
+        
         self.use_masknet = use_masknet
 
         if self.use_masknet:
@@ -106,11 +106,11 @@ class HGNetwork(BasePolicy):
                 rotation = actions.argmax()
                 action = rotation*self.heightmap_resolution*self.heightmap_resolution + action_idxs[rotation]
                 action = th.tensor([action])
+                self.action_counter[rotation] += 1
+                self.timestep += 1
             else:
-                action = q_values.argmax(dim=1)
+                action = q_values.argmax(dim=1)            
             
-            self.action_counter[rotation] += 1
-            self.timestep += 1
         else:
             actions = th.arange(start=0, end=self.num_rotations*self.heightmap_resolution*self.heightmap_resolution, dtype=th.long).to(self.device)
             actions = actions.reshape((1, self.num_rotations, self.heightmap_resolution, self.heightmap_resolution))
