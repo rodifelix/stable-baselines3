@@ -90,7 +90,7 @@ class PGBuffer(ReplayBuffer):
             self.future_reward = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
 
         if psutil is not None:
-            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.completes.nbytes + self.change.nbytes + self.future_reward.nbytes
+            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.completes.nbytes + self.change.nbytes
             if self.save_future_rewards:
                 total_memory_usage += self.future_reward.nbytes
 
