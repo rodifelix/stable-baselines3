@@ -204,13 +204,6 @@ class PGDQN(OffPolicyAlgorithm):
                 polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
             self.gamma = self.gamma_schedule(self._current_progress_remaining)
 
-        if self.num_timesteps == 1:
-            self.save(os.path.join(self.tensorboard_log, '..', "pqn_start.zip"))
-
-        if self.num_timesteps == self._total_timesteps/2:
-            print("Saving model with replay buffer at halfway mark")
-            self.save(os.path.join(self.tensorboard_log, '..', "pqn_halfway.zip"), include=["replay_buffer"])
-
         self.exploration_rate = self.exploration_schedule(self._current_progress_remaining)
         logger.record("rollout/exploration rate", self.exploration_rate)
 
