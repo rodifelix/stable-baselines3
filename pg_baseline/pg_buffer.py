@@ -20,7 +20,7 @@ class PGBufferSamples(NamedTuple):
     next_observations: th.Tensor
     dones: th.Tensor
     change: th.Tensor
-    completes: th.Tensor
+    terminal: th.Tensor
     rewards: th.Tensor
     iterations: th.Tensor
 
@@ -30,7 +30,7 @@ class PGBufferSamplesWithFutures(NamedTuple):
     next_observations: th.Tensor
     dones: th.Tensor
     change: th.Tensor
-    completes: th.Tensor
+    terminal: th.Tensor
     rewards: th.Tensor
     iterations: th.Tensor
     future_rewards: th.Tensor
@@ -78,7 +78,7 @@ class PGBuffer(ReplayBuffer):
         self.actions = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=action_space.dtype)
         self.rewards = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.dones = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
-        self.completes = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
+        self.terminal = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.surprise = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.change = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.save_indices = []
@@ -90,7 +90,7 @@ class PGBuffer(ReplayBuffer):
             self.future_reward = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
 
         if psutil is not None:
-            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.completes.nbytes + self.change.nbytes
+            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.terminal.nbytes + self.change.nbytes
             if self.save_future_rewards:
                 total_memory_usage += self.future_reward.nbytes
 
@@ -106,7 +106,7 @@ class PGBuffer(ReplayBuffer):
                     f"replay buffer {total_memory_usage:.2f}GB > {mem_available:.2f}GB"
                 )
 
-    def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: bool, done: np.ndarray, future_reward: np.ndarray = None) -> None:
+    def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: bool, done: np.ndarray, terminal_state: bool, future_reward: np.ndarray = None) -> None:
         # Copy to avoid modification by reference
         self.observations[self.pos] = np.array(obs).copy()
         if self.optimize_memory_usage:
@@ -117,7 +117,7 @@ class PGBuffer(ReplayBuffer):
         self.actions[self.pos] = np.array(action).copy()
         self.rewards[self.pos] = np.array(reward).copy()
         self.dones[self.pos] = np.array(done).copy()
-        self.completes[self.pos] = np.array(reward > 10).copy()
+        self.terminal[self.pos] = np.array(terminal_state)
         self.change[self.pos] = np.array(change)
         self.iteration[self.pos] = [self.iteration_offset*self.buffer_size + self.pos]
 
@@ -188,7 +188,7 @@ class PGBuffer(ReplayBuffer):
                 next_obs,
                 self.dones[batch_inds],
                 self.change[batch_inds],
-                self.completes[batch_inds],
+                self.terminal[batch_inds],
                 self._normalize_reward(self.rewards[batch_inds], env),
                 self.iteration[batch_inds],
                 self.future_reward[batch_inds]
@@ -201,7 +201,7 @@ class PGBuffer(ReplayBuffer):
                 next_obs,
                 self.dones[batch_inds],
                 self.change[batch_inds],
-                self.completes[batch_inds],
+                self.terminal[batch_inds],
                 self._normalize_reward(self.rewards[batch_inds], env),
                 self.iteration[batch_inds]
             )
@@ -237,7 +237,7 @@ def merge_buffers(*buffers,
             merged_buffer.actions[pos:count] = buffer.actions[:count]
             merged_buffer.rewards[pos:count] = buffer.rewards[:count]
             merged_buffer.dones[pos:count] = buffer.dones[:count]
-            merged_buffer.completes[pos:count] = buffer.completes[:count]
+            merged_buffer.terminal[pos:count] = buffer.terminal[:count]
             merged_buffer.surprise[pos:count] = buffer.surprise[:count]            
             pos +=count
         

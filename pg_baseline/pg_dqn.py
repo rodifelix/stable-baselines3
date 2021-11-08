@@ -214,7 +214,7 @@ class PGDQN(OffPolicyAlgorithm):
                 if self.use_target:           
                     target_q = replay_data.rewards
                 else:
-                    target_q = replay_data.rewards + (1 - replay_data.completes) * self.gamma * replay_data.future_rewards
+                    target_q = replay_data.rewards + (1 - replay_data.terminal) * self.gamma * replay_data.future_rewards
 
                 if self.net_class == "VPG":
                     current_q = self.q_net.forward_specific_rotations(replay_data.observations,  th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
@@ -246,7 +246,7 @@ class PGDQN(OffPolicyAlgorithm):
                                                     next_observations=replay_data.next_observations,
                                                     rewards=replay_data.rewards,
                                                     change=replay_data.change,
-                                                    completes=replay_data.completes,
+                                                    terminal=replay_data.terminal,
                                                     future_rewards=future_rewards, 
                                                     losses=losses)
 
@@ -260,7 +260,7 @@ class PGDQN(OffPolicyAlgorithm):
         logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
         logger.record("train/loss", np.mean(losses))
 
-    def backward_step(self, observations, actions, next_observations, rewards, change, completes, future_rewards, losses=None):
+    def backward_step(self, observations, actions, next_observations, rewards, change, terminal, future_rewards, losses=None):
         with th.no_grad():
             if self.gamma > 0:
                 if self.use_target:
@@ -285,7 +285,7 @@ class PGDQN(OffPolicyAlgorithm):
                     # Avoid potential broadcast issue
                 target_q = target_q.reshape(-1, 1)
                     # 1-step TD target
-                target_q = rewards + (1 - completes) * self.gamma * target_q
+                target_q = rewards + (1 - terminal) * self.gamma * target_q
             else:
                 target_q = rewards
 
@@ -328,7 +328,7 @@ class PGDQN(OffPolicyAlgorithm):
             self.policy.mask_optimizer.step()
         return target_q,current_q
 
-    def testing_backward(self, observation, action, next_observation, reward, change, complete):
+    def testing_backward(self, observation, action, next_observation, reward, change, terminal):
         future_reward = None
         with th.no_grad():
             if self.gamma > 0:
@@ -340,7 +340,7 @@ class PGDQN(OffPolicyAlgorithm):
                             next_observations=next_observation.to(self.device),
                             rewards=th.tensor(reward).reshape(-1, 1).to(self.device),
                             change = th.tensor(change, dtype=th.float).reshape(-1, 1).to(self.device),
-                            completes=th.tensor(complete, dtype=th.float).reshape(-1, 1).to(self.device),
+                            terminal=th.tensor(terminal, dtype=th.float).reshape(-1, 1).to(self.device),
                             future_rewards=future_reward)
                 
 
@@ -487,7 +487,7 @@ class PGDQN(OffPolicyAlgorithm):
                         with th.no_grad():
                             future_reward = self.q_net.forward(th.tensor(next_obs, device=self.device)).max(dim=1)[0].detach().cpu().numpy()
 
-                    replay_buffer.add(self._last_original_obs, next_obs, buffer_action, reward_, infos[0]["change"], done, future_reward)
+                    replay_buffer.add(self._last_original_obs, next_obs, buffer_action, reward_, infos[0]["change"], done, infos[0]["terminal_state"], future_reward)
 
                 self._last_obs = new_obs
                 # Save the unnormalized observation
