@@ -318,6 +318,9 @@ class PGDQN(OffPolicyAlgorithm):
             predictions = th.gather(mask, dim=1, index=actions.long())
 
             labels = change
+            th.set_printoptions(profile="full")
+            print("Mask Predictions: ", predictions, "\n Mask Labels: ", labels)
+            th.set_printoptions(profile="default")
 
             mask_loss = F.binary_cross_entropy(predictions, labels)
 
