@@ -16,6 +16,8 @@ from stable_baselines3.common.noise import ActionNoise
 from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.callbacks import BaseCallback
 
+from cw2 import cw_error
+
 class PGDQN(OffPolicyAlgorithm):
     """
     Deep Q-Network (DQN)
@@ -324,11 +326,17 @@ class PGDQN(OffPolicyAlgorithm):
 
             mask_loss = F.binary_cross_entropy(predictions, labels)
 
+            print("Mask loss:", mask_loss)
+
+            if th.isnan(predictions).any():
+                raise cw_error.ExperimentSurrender()
+
             self.policy.mask_optimizer.zero_grad()
             mask_loss.backward()
-                # Clip gradient norm
+            # Clip gradient norm
             th.nn.utils.clip_grad_norm_(self.policy.q_net.mask_net.parameters(), self.max_grad_norm)
             self.policy.mask_optimizer.step()
+
         return target_q,current_q
 
     def testing_backward(self, observation, action, next_observation, reward, change, terminal):
