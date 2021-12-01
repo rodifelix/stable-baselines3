@@ -16,6 +16,8 @@ from stable_baselines3.common.noise import ActionNoise
 from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.callbacks import BaseCallback
 
+import time
+
 from cw2 import cw_error
 
 class PGDQN(OffPolicyAlgorithm):
@@ -158,6 +160,9 @@ class PGDQN(OffPolicyAlgorithm):
         if _init_setup_model:
             self._setup_model()
 
+        self.sample_time = 0
+        self.backward_time = 0
+
     def _setup_model(self) -> None:
         self._setup_lr_schedule()
         self.set_random_seed(self.seed)
@@ -237,12 +242,16 @@ class PGDQN(OffPolicyAlgorithm):
         losses = []
         for gradient_step in range(gradient_steps):
             # Sample replay buffer
+            start_sample_time = time.time()
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
+            end_sample_time = time.time()
+            self.sample_time += end_sample_time-start_sample_time
 
             future_rewards = None
             if not self.use_target:
                 future_rewards = replay_data.future_rewards
 
+            start_backward_time = time.time()
             target_q, current_q = self.backward_step(observations=replay_data.observations,
                                                     actions=replay_data.actions,
                                                     next_observations=replay_data.next_observations,
@@ -251,6 +260,8 @@ class PGDQN(OffPolicyAlgorithm):
                                                     terminal=replay_data.terminal,
                                                     future_rewards=future_rewards, 
                                                     losses=losses)
+            end_backward_time = time.time()  
+            self.backward_time += end_backward_time-start_backward_time 
 
             np.add.at(self.train_counter, replay_data.iterations.cpu(), 1)
             new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
@@ -407,6 +418,8 @@ class PGDQN(OffPolicyAlgorithm):
         )
 
         np.savetxt(os.path.join(self.tensorboard_log, '..', "training_log.txt"), self.train_counter, fmt='%i')
+        print("Total runtime sample", self.sample_time)
+        print("Total runtime backward", self.backward_time)
         return self
 
     def collect_rollouts(
