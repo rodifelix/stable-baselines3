@@ -324,12 +324,12 @@ class PGDQN(OffPolicyAlgorithm):
             print("Mask Predictions: ", predictions, "\n Mask Labels: ", labels)
             th.set_printoptions(profile="default")
 
+            if th.isnan(predictions).any():
+                raise cw_error.ExperimentSurrender()
+
             mask_loss = F.binary_cross_entropy(predictions, labels)
 
             print("Mask loss:", mask_loss)
-
-            if th.isnan(predictions).any():
-                raise cw_error.ExperimentSurrender()
 
             self.policy.mask_optimizer.zero_grad()
             mask_loss.backward()
