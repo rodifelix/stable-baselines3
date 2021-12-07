@@ -9,7 +9,7 @@ from stable_baselines3.common import logger
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, RolloutReturn
 from stable_baselines3.common.utils import get_linear_fn, polyak_update
-from pg_baseline.pg_policies import PGDQNPolicy
+from pg_baseline.pg_policies import PGDQNPolicy, NoObjectsInSceneException
 from pg_baseline.pg_buffer import PGBuffer
 from stable_baselines3.common.vec_env import VecEnv
 from stable_baselines3.common.noise import ActionNoise
@@ -384,7 +384,11 @@ class PGDQN(OffPolicyAlgorithm):
             (used in recurrent policies)
         """
         explore = np.random.rand() < self.exploration_rate or (self.num_timesteps < self.trainings_starts)
-        action, state = self.policy.predict(observation, state, mask, not explore)
+        try:
+            action, state = self.policy.predict(observation, state, mask, not explore)
+        except NoObjectsInSceneException:
+            self.env.envs[0].save_current_state_as_image(os.path.join(self.tensorboard_log, '..'))
+            raise cw_error.ExperimentSurrender
         return action, state
 
     def learn(

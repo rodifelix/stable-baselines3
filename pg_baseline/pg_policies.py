@@ -123,8 +123,7 @@ class HGNetwork(BasePolicy):
                 valid_idx = valid_idx.type(th.long)
                 action = valid_idx[choice].reshape(-1)
             else:
-                print("\n\n No valid actions after mask. Is scene empty? Returning action 0")
-                action = th.zeros([1], device=self.device, dtype=th.int64)
+                raise NoObjectsInSceneException("No valid actions after mask. Is scene empty?")
 
             print("\n\nExploring in next iteration: Random action index:", action)
         return action
@@ -487,5 +486,9 @@ class PGDQNPolicy(BasePolicy):
             )
         )
         return data
+
+class NoObjectsInSceneException(Exception):
+    pass
+
 
 register_policy("PGDQNPolicy", PGDQNPolicy)
