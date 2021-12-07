@@ -259,6 +259,7 @@ class PGDQN(OffPolicyAlgorithm):
                                                     change=replay_data.change,
                                                     terminal=replay_data.terminal,
                                                     future_rewards=future_rewards, 
+                                                    iterations=replay_data.iterations,
                                                     losses=losses)
             end_backward_time = time.time()  
             self.backward_time += end_backward_time-start_backward_time 
@@ -273,7 +274,7 @@ class PGDQN(OffPolicyAlgorithm):
         logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
         logger.record("train/loss", np.mean(losses))
 
-    def backward_step(self, observations, actions, next_observations, rewards, change, terminal, future_rewards, losses=None):
+    def backward_step(self, observations, actions, next_observations, rewards, change, terminal, future_rewards, iterations=None, losses=None):
         with th.no_grad():
             if self.gamma > 0:
                 if self.use_target:
@@ -337,6 +338,9 @@ class PGDQN(OffPolicyAlgorithm):
 
             if th.isnan(predictions).any():
                 raise cw_error.ExperimentSurrender()
+
+            if iterations is not None:
+                print("Max Mask Loss Iteration Index: ", th.gather(iterations, dim=0, index=th.argmax(th.abs(th.sub(predictions, labels)), dim=0, keepdim=True)).item())
 
             mask_loss = F.binary_cross_entropy(predictions, labels)
 
