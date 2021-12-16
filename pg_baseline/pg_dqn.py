@@ -234,10 +234,7 @@ class PGDQN(OffPolicyAlgorithm):
                 self.replay_buffer.update_sample_surprise_values(new_surprise_values)
             return
 
-        if self.net_class == "HG_Mask":
-            self._update_learning_rate([self.policy.optimizer, self.policy.mask_optimizer])
-        else:
-            self._update_learning_rate([self.policy.optimizer])
+        self._update_learning_rate([self.policy.optimizer])
 
         losses = []
         for gradient_step in range(gradient_steps):

@@ -395,6 +395,7 @@ class PGDQNPolicy(BasePolicy):
         num_rotations: int,
         net_class: str,
         ucb_confidence: float,
+        mask_lr: float = 1e-4,
         preload_mask_path: Optional[str] = None,
         optimizer_class: Type[th.optim.Optimizer] = th.optim.SGD,
         optimizer_kwargs: Optional[Dict[str, Any]] = {
@@ -429,6 +430,7 @@ class PGDQNPolicy(BasePolicy):
         if self.net_class == "HG_Mask":
             self.net_args["preload_mask_path"] = self.preload_mask_path
             self.net_args["use_masknet"] = True
+            self.mask_lr = mask_lr
         elif self.net_class == "HG":
             self.net_args["preload_mask_path"] = None
             self.net_args["use_masknet"] = False
@@ -452,7 +454,7 @@ class PGDQNPolicy(BasePolicy):
         # Setup optimizer with initial learning rate
         if self.net_class == "HG_Mask":
             self.optimizer = self.optimizer_class(self.q_net.net.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
-            self.mask_optimizer = th.optim.Adam(self.q_net.mask_net.parameters(), lr=lr_schedule(1))
+            self.mask_optimizer = th.optim.Adam(self.q_net.mask_net.parameters(), lr=self.mask_lr)
         else:
             self.optimizer = self.optimizer_class(self.q_net.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
