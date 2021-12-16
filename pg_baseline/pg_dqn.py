@@ -339,10 +339,14 @@ class PGDQN(OffPolicyAlgorithm):
             if th.isnan(predictions).any():
                 raise cw_error.ExperimentSurrender()
 
-            if iterations is not None:
-                print("Max Mask Loss Iteration Index: ", th.gather(iterations, dim=0, index=th.argmax(th.abs(th.sub(predictions, labels)), dim=0, keepdim=True)).item())
-
             mask_loss = F.binary_cross_entropy(predictions, labels)
+
+            if iterations is not None:
+                max_loss_index = th.gather(iterations, dim=0, index=th.argmax(th.abs(th.sub(predictions, labels)), dim=0, keepdim=True)).item()
+                print("Max Mask Loss Iteration Index: ", max_loss_index)
+                if mask_loss > 5 and max_loss_index == self.num_timesteps-1:
+                    print("Save iteration image", self.num_timesteps-1)
+                    self.env.envs[0].save_last_transition(os.path.join(self.tensorboard_log, '..'))
 
             print("Mask loss:", mask_loss)
 
