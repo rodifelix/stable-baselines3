@@ -485,6 +485,7 @@ class PGDQNPolicy(BasePolicy):
                 use_target=self.use_target,
                 net_class=self.net_class,
                 preload_mask_path=self.preload_mask_path,
+                mask_lr = self.mask_lr
             )
         )
         return data
