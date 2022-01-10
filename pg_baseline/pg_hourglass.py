@@ -218,6 +218,13 @@ class Push_Into_Box_Net(nn.Module):
         self.back = [nn.ReplicationPad2d(3),
                      nn.Conv2d(self.params['hg_across_channels'], self.params['output_channels'], kernel_size=7, stride=1),
                      nn.InstanceNorm2d(self.params['output_channels'], affine=True)]
+
+        if self.params['dueling']:
+            self.back_state = [nn.ReplicationPad2d(3),
+                    nn.Conv2d(self.params['hg_across_channels'], 1, kernel_size=7, stride=1),
+                    nn.InstanceNorm2d(1, affine=True),
+                    nn.Flatten(),
+                    nn.Linear(self.params['resolution']**2, 1)]
         
         self.front = nn.Sequential(*self.front)
         
@@ -227,6 +234,9 @@ class Push_Into_Box_Net(nn.Module):
             self.hg.append(HourGlass(params))
 
         self.back = nn.Sequential(*self.back)
+
+        if self.params['dueling']:
+            self.back_state = nn.Sequential(*self.back_state)
             
     def forward(self, x):
         # print('[INFO] Size 1 ', x.size())     nSamples x nChannels x Height x Width
@@ -235,10 +245,14 @@ class Push_Into_Box_Net(nn.Module):
         # print('in_features: ', in_features.size())
         
         for i in range(self.params['n_stages']):
-               out = self.hg[i](in_features)
-                
-        out = self.back(out)
-        
+               hg_out = self.hg[i](in_features)
+
+        out = self.back(hg_out)
+
+        if self.params['dueling']:
+            state_value = self.back_state(hg_out)
+            out = state_value + (out - out.mean())
+                    
         # print('output of Push_Into_Box_Net: ', out.size())
         
         return out
@@ -272,4 +286,9 @@ def get_pibn_parameters():
         # channels of the image
         'input_channels': 1,
         # output channels
-        'output_channels': 16}
+        'output_channels': 16,
+        #dueling flag
+        'dueling': False,
+        #resolution
+        'resolution': 224
+        }

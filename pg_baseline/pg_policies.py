@@ -29,6 +29,7 @@ class HGNetwork(BasePolicy):
         ucb_confidence: float,
         use_masknet: bool,
         preload_mask_path: Optional[str],
+        dueling: bool,
     ):
         super(HGNetwork, self).__init__(
             observation_space,
@@ -42,7 +43,9 @@ class HGNetwork(BasePolicy):
 
         params = pg_hourglass.get_pibn_parameters()
 
+        params['resolution'] = heightmap_resolution
         params['output_channels'] = self.num_rotations
+        params['dueling'] = dueling
 
         self.net = pg_hourglass.Push_Into_Box_Net(params)
 
@@ -395,6 +398,7 @@ class PGDQNPolicy(BasePolicy):
         num_rotations: int,
         net_class: str,
         ucb_confidence: float,
+        dueling: bool,
         mask_lr: float = 1e-4,
         preload_mask_path: Optional[str] = None,
         optimizer_class: Type[th.optim.Optimizer] = th.optim.SGD,
@@ -419,6 +423,7 @@ class PGDQNPolicy(BasePolicy):
         self.use_target = use_target
         self.net_class = net_class
         self.preload_mask_path = preload_mask_path
+        self.dueling = dueling
 
         self.net_args = {
             "observation_space": self.observation_space,
@@ -426,6 +431,7 @@ class PGDQNPolicy(BasePolicy):
             "heightmap_resolution": self.heightmap_resolution,
             "num_rotations": self.num_rotations,
             "ucb_confidence": self.ucb_confidence,
+            "dueling": self.dueling,
         }
         if self.net_class == "HG_Mask":
             self.net_args["preload_mask_path"] = self.preload_mask_path
@@ -485,6 +491,7 @@ class PGDQNPolicy(BasePolicy):
                 use_target=self.use_target,
                 net_class=self.net_class,
                 preload_mask_path=self.preload_mask_path,
+                dueling=self.dueling,
                 mask_lr = self.mask_lr
             )
         )
