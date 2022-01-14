@@ -398,7 +398,7 @@ class PGDQNPolicy(BasePolicy):
         num_rotations: int,
         net_class: str,
         ucb_confidence: float,
-        dueling: bool,
+        dueling: bool = False,
         mask_lr: float = 1e-4,
         preload_mask_path: Optional[str] = None,
         optimizer_class: Type[th.optim.Optimizer] = th.optim.SGD,
