@@ -323,6 +323,8 @@ class PGDQN(OffPolicyAlgorithm):
 
         self.policy.optimizer.step()
 
+        self.policy.reset_noise()
+
         if self.update_mask:
             mask = self.q_net.mask(observations)
                 

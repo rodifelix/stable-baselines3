@@ -1,6 +1,8 @@
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import gym
+from pg_baseline.NoisyConv2d import NoisyConv2d
+from pg_baseline.NoisyLinear import NoisyLinear
 import torch as th
 from torch import nn
 from collections import OrderedDict
@@ -30,6 +32,7 @@ class HGNetwork(BasePolicy):
         use_masknet: bool,
         preload_mask_path: Optional[str],
         dueling: bool,
+        noisy: bool,
     ):
         super(HGNetwork, self).__init__(
             observation_space,
@@ -46,8 +49,11 @@ class HGNetwork(BasePolicy):
         params['resolution'] = heightmap_resolution
         params['output_channels'] = self.num_rotations
         params['dueling'] = dueling
+        params['noisy'] = noisy
 
         self.net = pg_hourglass.Push_Into_Box_Net(params)
+
+        self.noisy_layers = [module for module in self.net.modules() if isinstance(module, (NoisyConv2d, NoisyLinear))]
 
         self.ucb_confidence = ucb_confidence
 
@@ -175,6 +181,11 @@ class HGNetwork(BasePolicy):
         diluted_mask = th.repeat_interleave(diluted_mask, self.num_rotations, dim=1)
 
         return output_prob + diluted_mask
+
+    def reset_noise(self):
+        for noisy_module in self.noisy_layers:
+            noisy_module.reset_noise()
+
 
 
 class VPGNetwork(BasePolicy):
@@ -399,6 +410,7 @@ class PGDQNPolicy(BasePolicy):
         net_class: str,
         ucb_confidence: float,
         dueling: bool = False,
+        noisy: bool = True,
         mask_lr: float = 1e-4,
         preload_mask_path: Optional[str] = None,
         optimizer_class: Type[th.optim.Optimizer] = th.optim.SGD,
@@ -424,6 +436,7 @@ class PGDQNPolicy(BasePolicy):
         self.net_class = net_class
         self.preload_mask_path = preload_mask_path
         self.dueling = dueling
+        self.noisy = noisy
 
         self.net_args = {
             "observation_space": self.observation_space,
@@ -432,6 +445,7 @@ class PGDQNPolicy(BasePolicy):
             "num_rotations": self.num_rotations,
             "ucb_confidence": self.ucb_confidence,
             "dueling": self.dueling,
+            "noisy": self.noisy,
         }
         if self.net_class == "HG_Mask":
             self.net_args["preload_mask_path"] = self.preload_mask_path
@@ -477,6 +491,10 @@ class PGDQNPolicy(BasePolicy):
     def _predict(self, obs: th.Tensor, deterministic: bool = True) -> th.Tensor:
         return self.q_net._predict(obs, deterministic=deterministic)
 
+    def reset_noise(self):
+        if self.net_class == "HG" or self.net_class == "HG_Mask":
+            self.q_net.reset_noise()
+
     def _get_data(self) -> Dict[str, Any]:
         data = super()._get_data()
 
@@ -492,6 +510,7 @@ class PGDQNPolicy(BasePolicy):
                 net_class=self.net_class,
                 preload_mask_path=self.preload_mask_path,
                 dueling=self.dueling,
+                noisy=self.noisy,
                 mask_lr = self.mask_lr
             )
         )

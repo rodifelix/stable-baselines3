@@ -32,6 +32,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from pg_baseline.NoisyConv2d import NoisyConv2d
+from pg_baseline.NoisyLinear import NoisyLinear
 
 # body: input --> 1x1 Conv2d --> InstanceNorm2d --> ReLU --> 3x3 Conv2d --> InstanceNorm2d --> ReLU --> 1x1 Conv2d --> InstanceNorm2d --> output
 # shortcut: input --> 1x1 Conv2d --> output
@@ -215,16 +217,29 @@ class Push_Into_Box_Net(nn.Module):
                      self.residual_block(self.params['front_channels'], self.params['front_channels']),
                      self.residual_block(self.params['front_channels'], self.params['hg_input_channels'])]
 
-        self.back = [nn.ReplicationPad2d(3),
-                     nn.Conv2d(self.params['hg_across_channels'], self.params['output_channels'], kernel_size=7, stride=1),
-                     nn.InstanceNorm2d(self.params['output_channels'], affine=True)]
 
-        if self.params['dueling']:
-            self.back_state = [nn.ReplicationPad2d(3),
-                    nn.Conv2d(self.params['hg_across_channels'], 1, kernel_size=7, stride=1),
-                    nn.InstanceNorm2d(1, affine=True),
-                    nn.Flatten(),
-                    nn.Linear(self.params['resolution']**2, 1)]
+        if self.params['noisy']:
+            self.back = [nn.ReplicationPad2d(3),
+                        NoisyConv2d(self.params['hg_across_channels'], self.params['output_channels'], kernel_size=7, stride=1),
+                        nn.InstanceNorm2d(self.params['output_channels'], affine=True)]
+
+            if self.params['dueling']:
+                self.back_state = [nn.ReplicationPad2d(3),
+                        NoisyConv2d(self.params['hg_across_channels'], 1, kernel_size=7, stride=1),
+                        nn.InstanceNorm2d(1, affine=True),
+                        nn.Flatten(),
+                        NoisyLinear(self.params['resolution']**2, 1)]
+        else:
+            self.back = [nn.ReplicationPad2d(3),
+                        nn.Conv2d(self.params['hg_across_channels'], self.params['output_channels'], kernel_size=7, stride=1),
+                        nn.InstanceNorm2d(self.params['output_channels'], affine=True)]
+
+            if self.params['dueling']:
+                self.back_state = [nn.ReplicationPad2d(3),
+                        nn.Conv2d(self.params['hg_across_channels'], 1, kernel_size=7, stride=1),
+                        nn.InstanceNorm2d(1, affine=True),
+                        nn.Flatten(),
+                        nn.Linear(self.params['resolution']**2, 1)]
         
         self.front = nn.Sequential(*self.front)
         
@@ -290,5 +305,7 @@ def get_pibn_parameters():
         #dueling flag
         'dueling': False,
         #resolution
-        'resolution': 224
+        'resolution': 224,
+        #noisy layers
+        'noisy': False,
         }
