@@ -250,8 +250,8 @@ class Push_Into_Box_Net(nn.Module):
         out = self.back(hg_out)
 
         if self.params['dueling']:
-            state_value = self.back_state(hg_out)
-            out = state_value + (out - out.mean())
+            state_value = self.back_state(hg_out).unsqueeze(-1).unsqueeze(-1)
+            out = state_value.add(out - out.mean(dim=[1,2,3], keepdim=True))
                     
         # print('output of Push_Into_Box_Net: ', out.size())
         
