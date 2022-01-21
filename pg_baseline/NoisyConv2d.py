@@ -67,15 +67,8 @@ class NoisyConv2d(Module):
         return x
 
     def reset_noise(self):
-        """Make new noise."""
-        epsilon = None
-        for dim in self.weight_sigma.size():
-            if epsilon is None:
-                epsilon = self.scale_noise(dim)
-            else:
-                epsilon = epsilon.unsqueeze(-1)*self.scale_noise(dim)
-        self.weight_epsilon = Variable(epsilon)
-        self.bias_epsilon = Variable(self.scale_noise(self.out_channels))
+        self.weight_epsilon = torch.randn(self.weight_sigma.size(), device=self.weight_sigma.device)
+        self.bias_epsilon = torch.randn(self.bias_sigma.size(), device=self.bias_sigma.device)
 
     def forward(self, input):
         if self.training:
