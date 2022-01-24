@@ -471,8 +471,6 @@ class PGDQNPolicy(BasePolicy):
             self.q_net_target = self.make_q_net()
             self.q_net_target.load_state_dict(self.q_net.state_dict())
 
-        self.reset_noise()
-
         # Setup optimizer with initial learning rate
         if self.net_class == "HG_Mask":
             self.optimizer = self.optimizer_class(self.q_net.net.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
