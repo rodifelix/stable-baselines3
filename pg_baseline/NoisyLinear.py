@@ -28,6 +28,7 @@ class NoisyLinear(nn.Module):
     self.bias_sigma.data.fill_(self.std_init / math.sqrt(self.out_features))
 
   def _scale_noise(self, size):
+    print("Scale noise in NoisyLinear called, weight_mu.device:", self.weight_mu.device)
     x = torch.randn(size, device=self.weight_mu.device)
     return x.sign().mul_(x.abs().sqrt_())
 
