@@ -72,7 +72,6 @@ class NoisyConv2d(Module):
 
     def forward(self, input):
         if self.training:
-            print(self.weight_mu.device, self.weight_sigma.device, self.weight_epsilon.device)
             return F.conv2d(input,
                             self.weight_mu + self.weight_sigma.mul(self.weight_epsilon),
                             self.bias_mu + self.bias_sigma.mul(self.bias_epsilon),
