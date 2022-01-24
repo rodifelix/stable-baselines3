@@ -481,7 +481,9 @@ class PGDQNPolicy(BasePolicy):
 
     def make_q_net(self) -> BasePolicy:
         if self.net_class == "HG" or self.net_class == "HG_Mask":
-            return HGNetwork(**self.net_args).to(self.device)
+            ret = HGNetwork(**self.net_args).to(self.device)
+            ret.reset_noise()
+            return ret
         elif self.net_class == "VPG":
             return VPGNetwork(**self.net_args).to(self.device)
 
