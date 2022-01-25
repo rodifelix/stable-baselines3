@@ -22,6 +22,7 @@ class PGBufferSamples(NamedTuple):
     change: th.Tensor
     terminal: th.Tensor
     rewards: th.Tensor
+    n_length: th.Tensor
     iterations: th.Tensor
 
 class PGBufferSamplesWithFutures(NamedTuple):
@@ -32,6 +33,7 @@ class PGBufferSamplesWithFutures(NamedTuple):
     change: th.Tensor
     terminal: th.Tensor
     rewards: th.Tensor
+    n_length: th.Tensor
     iterations: th.Tensor
     future_rewards: th.Tensor
 
@@ -55,10 +57,12 @@ class PGBuffer(ReplayBuffer):
         buffer_size: int,
         observation_space: spaces.Space,
         action_space: spaces.Space,
+        gamma: float,
         device: Union[th.device, str] = "cpu",
         n_envs: int = 1,
         optimize_memory_usage: bool = False,
         save_future_rewards: bool = False,
+        n_step: int = 1,
     ):
         super(ReplayBuffer, self).__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
 
@@ -81,16 +85,24 @@ class PGBuffer(ReplayBuffer):
         self.terminal = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.surprise = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.change = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
+        self.n_length = np.zeros((self.buffer_size, self.n_envs), dtype=np.int32)
         self.save_indices = []
         self.iteration = np.zeros((self.buffer_size, self.n_envs), dtype=np.int32)
-        self.iteration_offset = 0
+        self.iteration_counter = 0
+
+        self.n_step = n_step
+        self.n_counter = 0
+        self.gamma = gamma
+
+        if n_step > 0:
+            self.reward_sum = 0
 
         self.save_future_rewards = save_future_rewards
         if self.save_future_rewards:
             self.future_reward = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
 
         if psutil is not None:
-            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.terminal.nbytes + self.change.nbytes
+            total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes + self.surprise.nbytes + self.iteration.nbytes + self.terminal.nbytes + self.change.nbytes + self.n_length.nbytes
             if self.save_future_rewards:
                 total_memory_usage += self.future_reward.nbytes
 
@@ -108,27 +120,37 @@ class PGBuffer(ReplayBuffer):
 
     def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: bool, done: np.ndarray, terminal_state: bool, future_reward: np.ndarray = None) -> None:
         # Copy to avoid modification by reference
-        self.observations[self.pos] = np.array(obs).copy()
-        if self.optimize_memory_usage:
-            self.observations[(self.pos + 1) % self.buffer_size] = np.array(next_obs).copy()
-        else:
-            self.next_observations[self.pos] = np.array(next_obs).copy()
+        if self.n_counter == 0:
+            self.observations[self.pos] = np.array(obs).copy()
+            self.actions[self.pos] = np.array(action).copy()
+            self.change[self.pos] = np.array(change)
+            self.iteration[self.pos] = [self.iteration_counter]
 
-        self.actions[self.pos] = np.array(action).copy()
-        self.rewards[self.pos] = np.array(reward).copy()
-        self.dones[self.pos] = np.array(done).copy()
-        self.terminal[self.pos] = np.array(terminal_state)
-        self.change[self.pos] = np.array(change)
-        self.iteration[self.pos] = [self.iteration_offset*self.buffer_size + self.pos]
+        self.reward_sum += (self.gamma ^ self.n_counter) * np.array(reward).copy()
+        self.n_counter += 1
+        self.iteration_counter += 1
 
-        if self.save_future_rewards and future_reward is not None:
-            self.future_reward[self.pos] = np.array(future_reward).copy()
+        if self.n_counter == self.n_step or done or terminal_state:
+            self.rewards[self.pos] = self.reward_sum 
+            self.dones[self.pos] = np.array(done).copy()
+            self.terminal[self.pos] = np.array(terminal_state)
+            self.n_length[self.pos] = np.array(self.n_counter)
 
-        self.pos += 1
-        if self.pos == self.buffer_size:
-            self.full = True
-            self.pos = 0
-            self.iteration_offset += 1
+            if self.optimize_memory_usage:
+                self.observations[(self.pos + 1) % self.buffer_size] = np.array(next_obs).copy()
+            else:
+                self.next_observations[self.pos] = np.array(next_obs).copy()
+
+            if self.save_future_rewards and future_reward is not None:
+                self.future_reward[self.pos] = np.array(future_reward).copy()
+
+            self.reward_sum = 0
+            self.n_counter = 0            
+
+            self.pos += 1
+            if self.pos == self.buffer_size:
+                self.full = True
+                self.pos = 0
 
 
     def sample(self, batch_size: int, env: Optional[VecNormalize] = None) -> PGBufferSamples:
@@ -191,6 +213,7 @@ class PGBuffer(ReplayBuffer):
                 self.terminal[batch_inds],
                 self._normalize_reward(self.rewards[batch_inds], env),
                 self.iteration[batch_inds],
+                self.n_length[batch_inds],
                 self.future_reward[batch_inds]
             )
             return PGBufferSamplesWithFutures(*tuple(map(self.to_torch, data)))
@@ -203,7 +226,8 @@ class PGBuffer(ReplayBuffer):
                 self.change[batch_inds],
                 self.terminal[batch_inds],
                 self._normalize_reward(self.rewards[batch_inds], env),
-                self.iteration[batch_inds]
+                self.iteration[batch_inds],
+                self.n_length[batch_inds]
             )
             return PGBufferSamples(*tuple(map(self.to_torch, data)))
 

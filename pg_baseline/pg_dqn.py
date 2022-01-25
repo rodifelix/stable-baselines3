@@ -256,7 +256,8 @@ class PGDQN(OffPolicyAlgorithm):
                                                     rewards=replay_data.rewards,
                                                     change=replay_data.change,
                                                     terminal=replay_data.terminal,
-                                                    future_rewards=future_rewards, 
+                                                    n_length=replay_data.n_length,
+                                                    future_rewards=future_rewards,
                                                     iterations=replay_data.iterations,
                                                     losses=losses)
             end_backward_time = time.time()  
@@ -272,7 +273,7 @@ class PGDQN(OffPolicyAlgorithm):
         logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
         logger.record("train/loss", np.mean(losses))
 
-    def backward_step(self, observations, actions, next_observations, rewards, change, terminal, future_rewards, iterations=None, losses=None):
+    def backward_step(self, observations, actions, next_observations, rewards, change, terminal, n_length, future_rewards, iterations=None, losses=None):
         with th.no_grad():
             if self.gamma > 0:
                 if self.use_target:
@@ -297,7 +298,7 @@ class PGDQN(OffPolicyAlgorithm):
                     # Avoid potential broadcast issue
                 target_q = target_q.reshape(-1, 1)
                     # 1-step TD target
-                target_q = rewards + (1 - terminal) * self.gamma * target_q
+                target_q = rewards + (1 - terminal) * (self.gamma ^ n_length) * target_q
             else:
                 target_q = rewards
 
