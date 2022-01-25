@@ -302,7 +302,7 @@ class PGDQN(OffPolicyAlgorithm):
                     # Avoid potential broadcast issue
                 target_q = target_q.reshape(-1, 1)
                     # 1-step TD target
-                target_q = rewards + (1 - terminal) * (self.gamma ^ n_length) * target_q
+                target_q = rewards + (1 - terminal) * (self.gamma ** n_length) * target_q
             else:
                 target_q = rewards
 

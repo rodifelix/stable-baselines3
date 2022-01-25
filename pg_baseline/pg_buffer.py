@@ -126,7 +126,7 @@ class PGBuffer(ReplayBuffer):
             self.change[self.pos] = np.array(change)
             self.iteration[self.pos] = [self.iteration_counter]
 
-        self.reward_sum += (self.gamma ^ self.n_counter) * np.array(reward).copy()
+        self.reward_sum += (self.gamma ** self.n_counter) * np.array(reward).copy()
         self.n_counter += 1
         self.iteration_counter += 1
 
