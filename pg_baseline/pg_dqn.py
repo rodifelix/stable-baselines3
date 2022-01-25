@@ -98,6 +98,7 @@ class PGDQN(OffPolicyAlgorithm):
         use_double_q: bool = True,
         net_class: str = "HG_Mask",
         loss_function: F = F.mse_loss,
+        n_step = 1,
     ):
         if optimize_memory_usage:
             raise NotImplementedError("Optimize memory usage not supported")
@@ -143,6 +144,7 @@ class PGDQN(OffPolicyAlgorithm):
         # Linear schedule will be defined in `_setup_model()`
         self.exploration_schedule = None
         self.q_net, self.q_net_target = None, None
+        self.n_step = n_step
         
         self.use_target = use_target
         self.use_double_q = use_target and use_double_q #no target implies no double-q
@@ -169,12 +171,14 @@ class PGDQN(OffPolicyAlgorithm):
         if not self.testing_mode:
             if self.replay_buffer is None:
                 self.replay_buffer = PGBuffer(
-                    self.buffer_size,
-                    self.observation_space,
-                    self.action_space,
-                    self.device,
+                    buffer_size = self.buffer_size,
+                    observation_space = self.observation_space,
+                    action_space = self.action_space,
+                    device = self.device,
+                    gamma=self.gamma,
                     optimize_memory_usage=self.optimize_memory_usage,
-                    save_future_rewards=not self.use_target
+                    save_future_rewards=not self.use_target,
+                    n_step=self.n_step
                 )
             else:
                 self.replay_buffer.device = self.device
