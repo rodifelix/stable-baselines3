@@ -1,3 +1,4 @@
+from collections import deque
 import warnings
 from typing import Dict, Generator, Optional, Union, NamedTuple
 
@@ -91,11 +92,11 @@ class PGBuffer(ReplayBuffer):
         self.iteration_counter = 0
 
         self.n_step = n_step
-        self.n_counter = 0
         self.gamma = gamma
 
-        if n_step > 0:
-            self.reward_sum = 0
+        self.n_step_storage = deque()
+
+        self.unsampled_pos_start = 0
 
         self.save_future_rewards = save_future_rewards
         if self.save_future_rewards:
@@ -119,38 +120,92 @@ class PGBuffer(ReplayBuffer):
                 )
 
     def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: bool, done: np.ndarray, terminal_state: bool, future_reward: np.ndarray = None) -> None:
-        # Copy to avoid modification by reference
-        if self.n_counter == 0:
-            self.observations[self.pos] = np.array(obs).copy()
-            self.actions[self.pos] = np.array(action).copy()
-            self.change[self.pos] = np.array(change)
-            self.iteration[self.pos] = [self.iteration_counter]
+        if not change:
+            # Copy to avoid modification by reference
+            self._add(
+                obs=np.array(obs).copy(),
+                next_obs=np.array(next_obs).copy(),
+                action=np.array(action).copy(),
+                reward=np.array(reward).copy(),
+                change=np.array(change),
+                done=np.array(done).copy(),
+                terminal_state=np.array(terminal_state),
+                n_counter=1,
+                iteration=self.iteration_counter,
+                future_reward=None if future_reward is None else np.array(future_reward).copy()
+                )
+        else:
+            # Copy to avoid modification by reference
+            to_store = {
+                "obs" : np.array(obs).copy(),
+                "next_obs" : np.array(next_obs).copy(),
+                "action" : np.array(action).copy(),
+                "reward" : np.array(reward).copy(),
+                "change" : np.array(change),
+                "done" : np.array(done).copy(),
+                "terminal_state" : np.array(terminal_state),
+                "future_reward" : None if future_reward is None else np.array(future_reward).copy(),
+                "iteration" : self.iteration_counter
+            }
+            
+            self.n_step_storage.append(to_store)
 
-        self.reward_sum += (self.gamma ** self.n_counter) * np.array(reward).copy()
-        self.n_counter += 1
+        if len(self.n_step_storage) > 0 and ((change and terminal_state) or done or len(self.n_step_storage) >= self.n_step):
+            initial_obs = self.n_step_storage[0]["obs"]
+            last_next_obs = self.n_step_storage[-1]["next_obs"]
+            initial_action = self.n_step_storage[0]["action"]
+
+            reward_sum = 0
+            for i in range(len(self.n_step_storage)):
+                reward_sum += (self.gamma ** i) * self.n_step_storage[i]["reward"]
+
+            initial_change = self.n_step_storage[0]["change"]
+            last_terminal = self.n_step_storage[-1]["terminal_state"]
+            last_done = self.n_step_storage[-1]["done"]
+
+            last_future_reward = self.n_step_storage[-1]["future_reward"]
+
+            initial_iteration = self.n_step_storage[0]["iteration"]
+
+            self._add(
+                obs=initial_obs,
+                next_obs=last_next_obs,
+                action=initial_action,
+                reward=reward_sum,
+                change=initial_change,
+                done=last_done,
+                terminal_state=last_terminal,
+                n_counter=len(self.n_step_storage),
+                iteration=initial_iteration,
+                future_reward=last_future_reward
+                )
+
+            self.n_step_storage.clear()
+
         self.iteration_counter += 1
 
-        if self.n_counter == self.n_step or done or terminal_state:
-            self.rewards[self.pos] = self.reward_sum 
-            self.dones[self.pos] = np.array(done).copy()
-            self.terminal[self.pos] = np.array(terminal_state)
-            self.n_length[self.pos] = np.array(self.n_counter)
 
-            if self.optimize_memory_usage:
-                self.observations[(self.pos + 1) % self.buffer_size] = np.array(next_obs).copy()
-            else:
-                self.next_observations[self.pos] = np.array(next_obs).copy()
+    def _add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: np.ndarray, done: np.ndarray, terminal_state: np.ndarray, n_counter: int, iteration: int, future_reward: np.ndarray = None) -> None:
+        self.observations[self.pos] = obs
+        self.next_observations[self.pos] = next_obs
 
-            if self.save_future_rewards and future_reward is not None:
-                self.future_reward[self.pos] = np.array(future_reward).copy()
+        self.actions[self.pos] = action
+        self.rewards[self.pos] = reward
+        self.dones[self.pos] = done
+        self.terminal[self.pos] = terminal_state
+        self.change[self.pos] = change
+        self.iteration[self.pos] = [iteration]
+        self.n_length[self.pos] = [n_counter]
 
-            self.reward_sum = 0
-            self.n_counter = 0            
+        if self.save_future_rewards and future_reward is not None:
+            self.future_reward[self.pos] = future_reward
 
-            self.pos += 1
-            if self.pos == self.buffer_size:
-                self.full = True
-                self.pos = 0
+        self.pos += 1
+        if self.pos == self.buffer_size:
+            self.full = True
+            self.pos = 0
+            self.iteration_offset += 1
+
 
 
     def sample(self, batch_size: int, env: Optional[VecNormalize] = None) -> PGBufferSamples:
@@ -168,24 +223,17 @@ class PGBuffer(ReplayBuffer):
         if not self.optimize_memory_usage:
             upper_bound = self.buffer_size if self.full else self.pos
             batch_size = min(upper_bound, batch_size)
-            most_recent_element_idx = self.buffer_size - 1 if self.pos == 0 else self.pos-1
             assert batch_size > 0, "Error: Nothing in buffer to sample or batch_size set to 0" 
-            if batch_size > 1:                
-                sorted_surprise_ind = np.argsort(self.surprise[:upper_bound,0]).astype(int)
-                #skip element most recent element at self.pos-1, as this will always be selected
-                sorted_surprise_ind = sorted_surprise_ind[sorted_surprise_ind != most_recent_element_idx]
-                for i in range(batch_size-1):
-                    rand_sample_ind = np.round(np.random.power(2, 1)*(sorted_surprise_ind.size-1)).astype(int)
-                    if i == 0:
-                        self.save_indices = sorted_surprise_ind[rand_sample_ind]
-                    else:
-                        self.save_indices = np.append(self.save_indices, sorted_surprise_ind[rand_sample_ind])
-                    sorted_surprise_ind = np.delete(sorted_surprise_ind, rand_sample_ind)
+                        
+            self.save_indices = self.get_unsampled_indices()
 
-                # Always sample the most recent entry to generate surprise value
-                self.save_indices = np.append(self.save_indices, [most_recent_element_idx])
-            else:
-                self.save_indices = [most_recent_element_idx]
+            if len(self.save_indices) < batch_size:                
+                sorted_surprise_ind = np.argsort(self.surprise[:upper_bound,0]).astype(int)
+                sorted_surprise_ind = np.array([index for index in sorted_surprise_ind if index not in self.save_indices], dtype=np.int)
+                while len(self.save_indices) < batch_size:
+                    rand_sample_ind = np.round(np.random.power(2, 1)*(sorted_surprise_ind.size-1)).astype(int)
+                    self.save_indices = np.append(self.save_indices, sorted_surprise_ind[rand_sample_ind])
+                    sorted_surprise_ind = np.delete(sorted_surprise_ind, rand_sample_ind)
 
             return self._get_samples(self.save_indices, env=env)
         else:
@@ -196,6 +244,19 @@ class PGBuffer(ReplayBuffer):
         else:
             batch_inds = np.random.randint(0, self.pos, size=batch_size)
         return self._get_samples(batch_inds, env=env)"""
+
+    def sample_new_transitions(self, env: Optional[VecNormalize] = None) -> PGBufferSamples:
+        self.save_indices = self.get_unsampled_indices()
+        return self._get_samples(self.save_indices, env=env)
+
+    def get_unsampled_indices(self):       
+        if self.unsampled_pos_start <= self.pos:
+            indices = [*range(self.unsampled_pos_start, self.pos)]
+        else:
+            indices = [*range(self.unsampled_pos_start, self.buffer_size), *range(0, self.pos)]
+
+        self.unsampled_pos_start = self.pos
+        return indices
 
     def _get_samples(self, batch_inds: np.ndarray, env: Optional[VecNormalize] = None) -> PGBufferSamples:
         if self.optimize_memory_usage:
