@@ -178,7 +178,7 @@ class PGDQN(OffPolicyAlgorithm):
                     gamma=self.gamma,
                     optimize_memory_usage=self.optimize_memory_usage,
                     save_future_rewards=not self.use_target,
-                    n_step=self.n_step
+                    n_step= 1 # will be set to self.n_step after "training_starts" iterations
                 )
             else:
                 self.replay_buffer.device = self.device
@@ -211,17 +211,21 @@ class PGDQN(OffPolicyAlgorithm):
         Update the exploration rate and target network if needed.
         This method is called in ``collect_rollout()`` after each step in the environment.
         """
-        if self.num_timesteps % self.target_update_interval == 0 and self.num_timesteps > self.trainings_starts:
-            if self.use_target:
-                polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
-            self.gamma = self.gamma_schedule(self._current_progress_remaining)
+        if self.num_timesteps > self.trainings_starts:
+
+            self.replay_buffer.n_step = self.n_step
+
+            if self.num_timesteps % self.target_update_interval == 0:
+                if self.use_target:
+                    polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
+                self.gamma = self.gamma_schedule(self._current_progress_remaining)
 
         self.exploration_rate = self.exploration_schedule(self._current_progress_remaining)
         logger.record("rollout/exploration rate", self.exploration_rate)
 
     def train(self, gradient_steps: int, batch_size: int = 100) -> None:
         if self.num_timesteps < self.trainings_starts:
-            replay_data = self.replay_buffer.sample(1, env=self._vec_normalize_env)
+            replay_data = self.replay_buffer.sample_new_transitions(env=self._vec_normalize_env)
             with th.no_grad():
                 if self.use_target:           
                     target_q = replay_data.rewards
