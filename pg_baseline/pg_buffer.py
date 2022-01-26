@@ -22,8 +22,8 @@ class PGBufferSamples(NamedTuple):
     change: th.Tensor
     terminal: th.Tensor
     rewards: th.Tensor
-    n_length: th.Tensor
     iterations: th.Tensor
+    n_length: th.Tensor
 
 class PGBufferSamplesWithFutures(NamedTuple):
     observations: th.Tensor
@@ -33,8 +33,8 @@ class PGBufferSamplesWithFutures(NamedTuple):
     change: th.Tensor
     terminal: th.Tensor
     rewards: th.Tensor
-    n_length: th.Tensor
     iterations: th.Tensor
+    n_length: th.Tensor
     future_rewards: th.Tensor
 
 class PGBuffer(ReplayBuffer):
