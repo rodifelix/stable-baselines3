@@ -272,7 +272,9 @@ class PGDQN(OffPolicyAlgorithm):
             end_backward_time = time.time()  
             self.backward_time += end_backward_time-start_backward_time 
 
-            np.add.at(self.train_counter, replay_data.iterations.cpu(), 1)
+            iterations = replay_data.iterations.detach().cpu().numpy()
+            np.add.at(self.train_counter[:,0], iterations, 1)
+            self.train_counter[iterations,1] = replay_data.n_length.detach().cpu().numpy()
             new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
             self.replay_buffer.update_sample_surprise_values(new_surprise_values)
 
@@ -423,9 +425,9 @@ class PGDQN(OffPolicyAlgorithm):
     ) -> OffPolicyAlgorithm:
 
         if reset_num_timesteps or not hasattr(self, 'train_counter'):
-            self.train_counter = np.zeros(total_timesteps, dtype=np.uint16)
+            self.train_counter = np.zeros((total_timesteps, 2), dtype=np.uint16)
         else:
-            self.train_counter = np.append(self.train_counter, np.zeros(total_timesteps, dtype=np.uint16), axis=0)
+            self.train_counter = np.append(self.train_counter, np.zeros((total_timesteps, 2), dtype=np.uint16), axis=0)
 
         super(PGDQN, self).learn(
             total_timesteps=total_timesteps,
@@ -439,7 +441,7 @@ class PGDQN(OffPolicyAlgorithm):
             reset_num_timesteps=reset_num_timesteps,
         )
 
-        np.savetxt(os.path.join(self.tensorboard_log, '..', "training_log.txt"), self.train_counter, fmt='%i')
+        np.savetxt(os.path.join(self.tensorboard_log, '..', "training_log.txt"), self.train_counter, fmt='%i %i')
         print("Total runtime sample", self.sample_time)
         print("Total runtime backward", self.backward_time)
         return self
