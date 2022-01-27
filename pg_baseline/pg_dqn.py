@@ -383,6 +383,7 @@ class PGDQN(OffPolicyAlgorithm):
                             rewards=th.tensor(reward).reshape(-1, 1).to(self.device),
                             change = th.tensor(change, dtype=th.float).reshape(-1, 1).to(self.device),
                             terminal=th.tensor(terminal, dtype=th.float).reshape(-1, 1).to(self.device),
+                            n_length = th.tensor(1, dtype=th.int).to(self.device),
                             future_rewards=future_reward)
                 
 
