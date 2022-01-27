@@ -247,7 +247,11 @@ class PGBuffer(ReplayBuffer):
 
     def sample_new_transitions(self, env: Optional[VecNormalize] = None) -> PGBufferSamples:
         self.save_indices = self.get_unsampled_indices()
-        return self._get_samples(self.save_indices, env=env)
+
+        if len(self.save_indices) > 1:
+            return self._get_samples(self.save_indices, env=env)
+        else:
+            return None
 
     def get_unsampled_indices(self):       
         if self.unsampled_pos_start <= self.pos:

@@ -211,7 +211,7 @@ class PGDQN(OffPolicyAlgorithm):
         Update the exploration rate and target network if needed.
         This method is called in ``collect_rollout()`` after each step in the environment.
         """
-        if self.num_timesteps > self.trainings_starts:
+        if self.num_timesteps >= self.trainings_starts:
 
             self.replay_buffer.n_step = self.n_step
 
@@ -226,21 +226,22 @@ class PGDQN(OffPolicyAlgorithm):
     def train(self, gradient_steps: int, batch_size: int = 100) -> None:
         if self.num_timesteps < self.trainings_starts:
             replay_data = self.replay_buffer.sample_new_transitions(env=self._vec_normalize_env)
-            with th.no_grad():
-                if self.use_target:           
-                    target_q = replay_data.rewards
-                else:
-                    target_q = replay_data.rewards + (1 - replay_data.terminal) * self.gamma * replay_data.future_rewards
+            if replay_data is not None:
+                with th.no_grad():
+                    if self.use_target:           
+                        target_q = replay_data.rewards
+                    else:
+                        target_q = replay_data.rewards + (1 - replay_data.terminal) * self.gamma * replay_data.future_rewards
 
-                if self.net_class == "VPG":
-                    current_q = self.q_net.forward_specific_rotations(replay_data.observations,  th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
-                    current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
-                else:
-                    current_q = self.q_net.forward(replay_data.observations, mask=False)
-                    current_q = th.gather(current_q, dim=1, index=replay_data.actions.long())
+                    if self.net_class == "VPG":
+                        current_q = self.q_net.forward_specific_rotations(replay_data.observations,  th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
+                        current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
+                    else:
+                        current_q = self.q_net.forward(replay_data.observations, mask=False)
+                        current_q = th.gather(current_q, dim=1, index=replay_data.actions.long())
 
-                new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
-                self.replay_buffer.update_sample_surprise_values(new_surprise_values)
+                    new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
+                    self.replay_buffer.update_sample_surprise_values(new_surprise_values)
             return
 
         self._update_learning_rate([self.policy.optimizer])
