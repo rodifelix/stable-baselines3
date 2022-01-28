@@ -44,11 +44,14 @@ class NoisyConv2d(Module):
         
         self.weight_mu = Parameter(torch.Tensor(out_channels, in_channels//groups, *self.kernel_size))
         self.weight_sigma = Parameter(torch.Tensor(out_channels, in_channels//groups, *self.kernel_size))
+        self.weight_epsilon = self.register_buffer("weight_epsilon", torch.empty_like(self.weight_sigma))
         if bias:
             self.bias_mu = Parameter(torch.Tensor(out_channels))
             self.bias_sigma = Parameter(torch.Tensor(out_channels))
+            self.register_buffer("bias_epsilon", torch.empty_like(self.bias_sigma))
         else:
             self.register_parameter('bias', None)
+            self.register_buffer('bias_epsilon', None)
 
         self.reset_parameters(bias)
         self.reset_noise()
@@ -68,7 +71,7 @@ class NoisyConv2d(Module):
 
     def reset_noise(self):
         print("NoisyConv2D weight_sigma device", self.weight_sigma.device)
-        print("NoisyConv2d bias_sigma device", self.bias_sigma.device)
+        print("NoisyConv2D bias_sigma device", self.bias_sigma.device)
         self.weight_epsilon = torch.randn(self.weight_sigma.size(), device=self.weight_sigma.device)
         self.bias_epsilon = torch.randn(self.bias_sigma.size(), device=self.bias_sigma.device)
 
