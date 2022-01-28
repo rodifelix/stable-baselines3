@@ -438,7 +438,6 @@ class PGDQNPolicy(BasePolicy):
         self.preload_mask_path = preload_mask_path
         self.dueling = dueling
         self.noisy = noisy
-        self.device = device
 
         self.net_args = {
             "observation_space": self.observation_space,
@@ -461,7 +460,7 @@ class PGDQNPolicy(BasePolicy):
         self._build(lr_schedule)
 
 
-    def _build(self, lr_schedule: Callable) -> None:
+    def _build(self, lr_schedule: Callable, device: th.device) -> None:
         """
         Create the network and the optimizer.
         :param lr_schedule: Learning rate schedule
@@ -470,7 +469,7 @@ class PGDQNPolicy(BasePolicy):
 
         self.q_net = self.make_q_net()
         if self.use_target:
-            self.q_net_target = self.make_q_net()
+            self.q_net_target = self.make_q_net(device)
             self.q_net_target.load_state_dict(self.q_net.state_dict())
 
         # Setup optimizer with initial learning rate
@@ -481,11 +480,11 @@ class PGDQNPolicy(BasePolicy):
             self.optimizer = self.optimizer_class(self.q_net.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
 
-    def make_q_net(self) -> BasePolicy:
+    def make_q_net(self, device: th.device) -> BasePolicy:
         if self.net_class == "HG" or self.net_class == "HG_Mask":
-            return HGNetwork(**self.net_args).to(self.device)
+            return HGNetwork(**self.net_args).to(device)
         elif self.net_class == "VPG":
-            return VPGNetwork(**self.net_args).to(self.device)
+            return VPGNetwork(**self.net_args).to(device)
 
     def forward(self, obs: th.Tensor, deterministic: bool = True) -> th.Tensor:
         return self._predict(obs, deterministic=deterministic)
