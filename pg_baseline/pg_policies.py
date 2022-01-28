@@ -457,7 +457,7 @@ class PGDQNPolicy(BasePolicy):
             self.net_args["use_masknet"] = False
 
         self.q_net, self.q_net_target = None, None
-        self._build(lr_schedule, device)
+        self._build(lr_schedule)
 
 
     def _build(self, lr_schedule: Callable, device: th.device) -> None:
