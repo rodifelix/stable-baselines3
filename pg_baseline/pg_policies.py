@@ -404,6 +404,7 @@ class PGDQNPolicy(BasePolicy):
         observation_space: gym.spaces.Space,
         action_space: gym.spaces.Space,
         lr_schedule: Callable,
+        device: th.device,
         use_target: bool,
         heightmap_resolution: int,
         num_rotations: int,
@@ -437,6 +438,7 @@ class PGDQNPolicy(BasePolicy):
         self.preload_mask_path = preload_mask_path
         self.dueling = dueling
         self.noisy = noisy
+        self.device = device
 
         self.net_args = {
             "observation_space": self.observation_space,
