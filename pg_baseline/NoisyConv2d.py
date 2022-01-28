@@ -70,8 +70,6 @@ class NoisyConv2d(Module):
         return x
 
     def reset_noise(self):
-        print("NoisyConv2D weight_sigma device", self.weight_sigma.device)
-        print("NoisyConv2D bias_sigma device", self.bias_sigma.device)
         self.weight_epsilon = torch.randn(self.weight_sigma.size(), device=self.weight_sigma.device)
         self.bias_epsilon = torch.randn(self.bias_sigma.size(), device=self.bias_sigma.device)
 
