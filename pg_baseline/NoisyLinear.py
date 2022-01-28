@@ -28,6 +28,7 @@ class NoisyLinear(nn.Module):
     self.bias_sigma.data.fill_(self.std_init / math.sqrt(self.out_features))
 
   def _scale_noise(self, size):
+    print("NoisyLinear weight_mu device", self.weight_mu.device)
     x = torch.randn(size, device=self.weight_mu.device)
     return x.sign().mul_(x.abs().sqrt_())
 
@@ -36,6 +37,8 @@ class NoisyLinear(nn.Module):
     epsilon_out = self._scale_noise(self.out_features)
     self.weight_epsilon = epsilon_out.outer(epsilon_in)
     self.bias_epsilon = epsilon_out
+    print("NoisyLinear weight_epsilon device", self.weight_epsilon.device)
+    print("NoisyLinear bias_epsilon device", self.bias_epsilon.device)
 
   def forward(self, input):
     if self.training:
