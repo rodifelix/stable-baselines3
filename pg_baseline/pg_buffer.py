@@ -204,7 +204,6 @@ class PGBuffer(ReplayBuffer):
         if self.pos == self.buffer_size:
             self.full = True
             self.pos = 0
-            self.iteration_offset += 1
 
 
 
@@ -260,7 +259,7 @@ class PGBuffer(ReplayBuffer):
             indices = [*range(self.unsampled_pos_start, self.buffer_size), *range(0, self.pos)]
 
         self.unsampled_pos_start = self.pos
-        return indices
+        return np.array(indices, dtype=np.int)
 
     def _get_samples(self, batch_inds: np.ndarray, env: Optional[VecNormalize] = None) -> PGBufferSamples:
         if self.optimize_memory_usage:
