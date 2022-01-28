@@ -467,7 +467,7 @@ class PGDQNPolicy(BasePolicy):
             lr_schedule(1) is the initial learning rate
         """
 
-        self.q_net = self.make_q_net()
+        self.q_net = self.make_q_net(device)
         if self.use_target:
             self.q_net_target = self.make_q_net(device)
             self.q_net_target.load_state_dict(self.q_net.state_dict())
