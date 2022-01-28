@@ -494,6 +494,8 @@ class PGDQNPolicy(BasePolicy):
     def reset_noise(self):
         if self.net_class == "HG" or self.net_class == "HG_Mask":
             self.q_net.reset_noise()
+            if self.use_target:
+                self.q_net_target.reset_noise()
 
     def _get_data(self) -> Dict[str, Any]:
         data = super()._get_data()
