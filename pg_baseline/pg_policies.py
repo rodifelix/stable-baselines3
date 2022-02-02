@@ -410,7 +410,7 @@ class PGDQNPolicy(BasePolicy):
         net_class: str,
         ucb_confidence: float,
         dueling: bool = False,
-        noisy: bool = True,
+        noisy: bool = False,
         mask_lr: float = 1e-4,
         preload_mask_path: Optional[str] = None,
         optimizer_class: Type[th.optim.Optimizer] = th.optim.SGD,
