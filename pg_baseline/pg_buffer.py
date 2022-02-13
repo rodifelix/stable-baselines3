@@ -239,8 +239,8 @@ class PGBuffer(ReplayBuffer):
                     rand_sample_ind = np.round(np.random.power(2, 1)*(sorted_surprise_ind.size-1)).astype(int)
                     self.save_indices = np.append(self.save_indices, sorted_surprise_ind[rand_sample_ind])
                     sorted_surprise_ind = np.delete(sorted_surprise_ind, rand_sample_ind)
-            else:
-                self.save_indices = random.sample(range(upper_bound), k=batch_size)
+        else:
+            self.save_indices = random.sample(range(upper_bound), k=batch_size)
 
         return self._get_samples(self.save_indices, env=env)
         
