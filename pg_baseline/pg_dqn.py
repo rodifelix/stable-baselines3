@@ -96,6 +96,7 @@ class PGDQN(OffPolicyAlgorithm):
         update_mask: bool = True,
         use_target: bool = True,
         use_double_q: bool = True,
+        use_prio_exp: bool = True,
         net_class: str = "HG_Mask",
         loss_function: F = F.mse_loss,
         n_step = 1,
@@ -145,6 +146,7 @@ class PGDQN(OffPolicyAlgorithm):
         self.exploration_schedule = None
         self.q_net, self.q_net_target = None, None
         self.n_step = n_step
+        self.use_prio_exp = use_prio_exp
         
         self.use_target = use_target
         self.use_double_q = use_target and use_double_q #no target implies no double-q
@@ -178,7 +180,8 @@ class PGDQN(OffPolicyAlgorithm):
                     gamma=self.gamma,
                     optimize_memory_usage=self.optimize_memory_usage,
                     save_future_rewards=not self.use_target,
-                    n_step= 1 # will be set to self.n_step after "training_starts" iterations
+                    n_step= 1, # will be set to self.n_step after "training_starts" iterations
+                    prio_exp=self.use_prio_exp
                 )
             else:
                 self.replay_buffer.device = self.device
@@ -224,23 +227,24 @@ class PGDQN(OffPolicyAlgorithm):
 
     def train(self, gradient_steps: int, batch_size: int = 100) -> None:
         if self.num_timesteps < self.trainings_starts:
-            replay_data = self.replay_buffer.sample_new_transitions(env=self._vec_normalize_env)
-            if replay_data is not None:
-                with th.no_grad():
-                    if self.use_target:           
-                        target_q = replay_data.rewards
-                    else:
-                        target_q = replay_data.rewards + (1 - replay_data.terminal) * self.gamma * replay_data.future_rewards
+            if self.use_prio_exp:
+                replay_data = self.replay_buffer.sample_new_transitions(env=self._vec_normalize_env)
+                if replay_data is not None:
+                    with th.no_grad():
+                        if self.use_target:           
+                            target_q = replay_data.rewards
+                        else:
+                            target_q = replay_data.rewards + (1 - replay_data.terminal) * self.gamma * replay_data.future_rewards
 
-                    if self.net_class == "VPG":
-                        current_q = self.q_net.forward_specific_rotations(replay_data.observations,  th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
-                        current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
-                    else:
-                        current_q = self.q_net.forward(replay_data.observations, mask=False)
-                        current_q = th.gather(current_q, dim=1, index=replay_data.actions.long())
+                        if self.net_class == "VPG":
+                            current_q = self.q_net.forward_specific_rotations(replay_data.observations,  th.floor_divide(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
+                            current_q = th.gather(current_q, dim=1, index=th.remainder(replay_data.actions.long(), self.heightmap_resolution*self.heightmap_resolution))
+                        else:
+                            current_q = self.q_net.forward(replay_data.observations, mask=False)
+                            current_q = th.gather(current_q, dim=1, index=replay_data.actions.long())
 
-                    new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
-                    self.replay_buffer.update_sample_surprise_values(new_surprise_values)
+                        new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
+                        self.replay_buffer.update_sample_surprise_values(new_surprise_values)
             return
 
         self._update_learning_rate([self.policy.optimizer])

@@ -5,6 +5,7 @@ from typing import Dict, Generator, Optional, Union, NamedTuple
 import numpy as np
 import torch as th
 from gym import spaces
+import random
 
 try:
     # Check memory used by replay buffer when possible
@@ -64,6 +65,7 @@ class PGBuffer(ReplayBuffer):
         optimize_memory_usage: bool = False,
         save_future_rewards: bool = False,
         n_step: int = 1,
+        prio_exp: bool = True,
     ):
         super(ReplayBuffer, self).__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
 
@@ -93,6 +95,8 @@ class PGBuffer(ReplayBuffer):
 
         self.n_step = n_step
         self.gamma = gamma
+
+        self.prio_exp = prio_exp
 
         self.n_step_storage = deque()
 
@@ -219,13 +223,15 @@ class PGBuffer(ReplayBuffer):
             to normalize the observations/rewards when sampling
         :return:
         """
-        if not self.optimize_memory_usage:
-            upper_bound = self.buffer_size if self.full else self.pos
-            batch_size = min(upper_bound, batch_size)
-            assert batch_size > 0, "Error: Nothing in buffer to sample or batch_size set to 0" 
-                        
+        if self.optimize_memory_usage:
+            raise NotImplementedError("Optimize memory usage not supported")
+        
+        upper_bound = self.buffer_size if self.full else self.pos
+        batch_size = min(upper_bound, batch_size)
+        assert batch_size > 0, "Error: Nothing in buffer to sample or batch_size set to 0" 
+                
+        if self.prio_exp:
             self.save_indices = self.get_unsampled_indices()
-
             if len(self.save_indices) < batch_size:                
                 sorted_surprise_ind = np.argsort(self.surprise[:upper_bound,0]).astype(int)
                 sorted_surprise_ind = np.array([index for index in sorted_surprise_ind if index not in self.save_indices], dtype=np.int)
@@ -233,17 +239,11 @@ class PGBuffer(ReplayBuffer):
                     rand_sample_ind = np.round(np.random.power(2, 1)*(sorted_surprise_ind.size-1)).astype(int)
                     self.save_indices = np.append(self.save_indices, sorted_surprise_ind[rand_sample_ind])
                     sorted_surprise_ind = np.delete(sorted_surprise_ind, rand_sample_ind)
+            else:
+                self.save_indices = random.sample(range(upper_bound), k=batch_size)
 
-            return self._get_samples(self.save_indices, env=env)
-        else:
-            raise NotImplementedError("Optimize memory usage with prio replay not supported yet")
-        #TODO: implement for optimize memory usage
-        """if self.full:
-            batch_inds = (np.random.randint(1, self.buffer_size, size=batch_size) + self.pos) % self.buffer_size
-        else:
-            batch_inds = np.random.randint(0, self.pos, size=batch_size)
-        return self._get_samples(batch_inds, env=env)"""
-
+        return self._get_samples(self.save_indices, env=env)
+        
     def sample_new_transitions(self, env: Optional[VecNormalize] = None) -> PGBufferSamples:
         self.save_indices = self.get_unsampled_indices()
 
@@ -296,8 +296,10 @@ class PGBuffer(ReplayBuffer):
             return PGBufferSamples(*tuple(map(self.to_torch, data)))
 
     def update_sample_surprise_values(self, new_values: np.ndarray):
-        assert len(new_values) == len(self.save_indices), "Amount of saved indices and provided amount of new values not the same"
-        self.surprise[self.save_indices] = new_values.copy()
+        if self.prio_exp:
+            assert len(new_values) == len(self.save_indices), "Amount of saved indices and provided amount of new values not the same"
+            self.surprise[self.save_indices] = new_values.copy()
+        
         self.save_indices = []
 
 def merge_buffers(*buffers, 
