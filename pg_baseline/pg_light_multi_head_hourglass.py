@@ -41,6 +41,7 @@ from torch.nn import (
     Upsample,
     MaxPool2d,
     BatchNorm2d,
+    Tanh,
 )
 
 class Push_Into_Box_Net(Module):
@@ -90,7 +91,7 @@ class Push_Into_Box_Net(Module):
             ReLU(),
             BatchNorm2d(24),
             Conv2d(24, self.num_out_channels, 3, stride=1, padding=1),
-            Sigmoid()
+            Tanh()
         )
 
         # Reward head
@@ -98,8 +99,7 @@ class Push_Into_Box_Net(Module):
             Conv2d(self.num_out_feat_channels, 24, 3, stride=1, padding=1),
             ReLU(),
             BatchNorm2d(24),
-            Conv2d(24, self.num_out_channels, 3, stride=1, padding=1),
-            ReLU()
+            Conv2d(24, self.num_out_channels, 3, stride=1, padding=1)
         )
 
         # Spatial/positional encoding
