@@ -41,7 +41,6 @@ from torch.nn import (
     Upsample,
     MaxPool2d,
     BatchNorm2d,
-    Tanh,
 )
 
 class Push_Into_Box_Net(Module):
@@ -91,7 +90,7 @@ class Push_Into_Box_Net(Module):
             ReLU(),
             BatchNorm2d(24),
             Conv2d(24, self.num_out_channels, 3, stride=1, padding=1),
-            Tanh()
+            Sigmoid()
         )
 
         # Reward head
@@ -133,7 +132,11 @@ class Push_Into_Box_Net(Module):
         out_mask = self.head_mask(out_net)
         out_reward = self.head_reward(out_net)
 
-        return [out_reward*out_mask, out_reward, out_mask]
+        mask = out_mask >= 0.14
+        mask = mask.float() - 1.
+        mask = mask * torch.finfo(torch.float).max
+
+        return [out_reward+mask, out_reward, out_mask]
 
 class Network_hg(Module):
 

@@ -100,6 +100,8 @@ class PGDQN(OffPolicyAlgorithm):
         net_class: str = "HG_Mask",
         loss_function: F = F.mse_loss,
         n_step = 1,
+        reward_loss_weight: float = 1.0,
+        mask_loss_weight: float = 1.0,
     ):
         if optimize_memory_usage:
             raise NotImplementedError("Optimize memory usage not supported")
@@ -152,6 +154,9 @@ class PGDQN(OffPolicyAlgorithm):
         self.use_double_q = use_target and use_double_q #no target implies no double-q
 
         self.net_class = net_class
+
+        self.reward_loss_weight = reward_loss_weight
+        self.mask_loss_weight = mask_loss_weight
 
         self.loss_function = loss_function
 
@@ -320,11 +325,21 @@ class PGDQN(OffPolicyAlgorithm):
                 # forward type, batch_size images, each with one specific rotation 
             current_q = self.q_net.forward_specific_rotations(observations,  th.floor_divide(actions.long(), self.heightmap_resolution*self.heightmap_resolution))
             current_q = th.gather(current_q, dim=1, index=th.remainder(actions.long(), self.heightmap_resolution*self.heightmap_resolution))
+            loss = self.loss_function(current_q, target_q)
+        elif self.net_class == "LightHG":
+            current_q, mask = self.q_net.full_forward(observations)
+            current_q = th.gather(current_q, dim=1, index=actions.long())
+            predictions = th.gather(mask, dim=1, index=actions.long())
+            reward_loss = self.loss_function(current_q, target_q)
+            labels = change
+            mask_loss = F.binary_cross_entropy(predictions, labels)
+            loss = self.reward_loss_weight * reward_loss + self.mask_loss_weight * mask_loss
         else:
             current_q = self.q_net.forward(observations, mask=False)
             current_q = th.gather(current_q, dim=1, index=actions.long())
 
-        loss = self.loss_function(current_q, target_q)
+            loss = self.loss_function(current_q, target_q)
+            
         if losses is not None:
             losses.append(loss.item())
 

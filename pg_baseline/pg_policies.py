@@ -68,6 +68,14 @@ class LightHGNetwork(BasePolicy):
         )
         return data
 
+
+    def full_forward(self, obs: th.Tensor):
+        batch_size = obs.shape[0]
+
+        output = self.net.forward(obs.to(self.device))
+
+        return th.reshape(output[1], (batch_size, self.num_rotations*self.heightmap_resolution*self.heightmap_resolution)), th.reshape(output[2], (obs.shape[0], self.num_rotations*self.heightmap_resolution*self.heightmap_resolution))
+
     def forward(self, obs: th.Tensor, mask=True) -> th.Tensor:
         """
         Predict the q-values.
@@ -87,7 +95,7 @@ class LightHGNetwork(BasePolicy):
 
 
     def mask(self, obs: th.Tensor) -> th.Tensor:
-        mask_output = self.net.forward(obs)[2]
+        mask_output = self.net.forward(obs.to(self.device))[2]
         return th.reshape(mask_output, (obs.shape[0], self.num_rotations*self.heightmap_resolution*self.heightmap_resolution))
 
     
