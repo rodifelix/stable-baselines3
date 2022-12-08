@@ -135,6 +135,7 @@ class PGDQN(OffPolicyAlgorithm):
             seed=seed,
             sde_support=False,
             optimize_memory_usage=optimize_memory_usage,
+            support_multi_env=True
         )
 
         self.exploration_initial_eps = exploration_initial_eps
@@ -498,7 +499,7 @@ class PGDQN(OffPolicyAlgorithm):
         total_steps, total_episodes = 0, 0
 
         assert isinstance(env, VecEnv), "You must pass a VecEnv"
-        assert env.num_envs == 1, "OffPolicyAlgorithm only support single environment"
+        # assert env.num_envs == 1, "OffPolicyAlgorithm only support single environment"
 
         if self.use_sde:
             self.actor.reset_noise()
@@ -506,84 +507,99 @@ class PGDQN(OffPolicyAlgorithm):
         callback.on_rollout_start()
         continue_training = True
 
+        episode_reward, episode_timesteps = np.full(env.num_envs, 0.0), np.full(env.num_envs, 0)
         while total_steps < n_steps or total_episodes < n_episodes:
-            done = False
-            episode_reward, episode_timesteps = 0.0, 0
+            done = np.full(env.num_envs, False)
 
-            while not done:
+            if self.use_sde and self.sde_sample_freq > 0 and total_steps % self.sde_sample_freq == 0:
+                # Sample a new noise matrix
+                self.actor.reset_noise()
 
-                if self.use_sde and self.sde_sample_freq > 0 and total_steps % self.sde_sample_freq == 0:
-                    # Sample a new noise matrix
-                    self.actor.reset_noise()
+            # Select action randomly or according to policy
+            action, buffer_action = self._sample_action(learning_starts, action_noise)
 
-                # Select action randomly or according to policy
-                action, buffer_action = self._sample_action(learning_starts, action_noise)
+            # Rescale and perform action
+            new_obs, reward, done, infos = env.step(action)
 
-                # Rescale and perform action
-                new_obs, reward, done, infos = env.step(action)
+            self.num_timesteps += 1
+            episode_timesteps += 1
+            total_steps += 1
 
-                self.num_timesteps += 1
-                episode_timesteps += 1
-                total_steps += 1
+            # Give access to local variables
+            callback.update_locals(locals())
+            # Only stop training if return value is False, not when it is None.
+            if callback.on_step() is False:
+                return RolloutReturn(0.0, total_steps, total_episodes, continue_training=False)
 
-                # Give access to local variables
-                callback.update_locals(locals())
-                # Only stop training if return value is False, not when it is None.
-                if callback.on_step() is False:
-                    return RolloutReturn(0.0, total_steps, total_episodes, continue_training=False)
+            episode_reward += reward
+            
+            done_indices = np.nonzero(done)[0]
 
-                episode_reward += reward
+            # Retrieve reward and episode length if using Monitor wrapper
+            self._update_info_buffer(infos, done)
 
-                # Retrieve reward and episode length if using Monitor wrapper
-                self._update_info_buffer(infos, done)
-
-                # Store data in replay buffer
-                if replay_buffer is not None:
-                    # Store only the unnormalized version
-                    if self._vec_normalize_env is not None:
-                        new_obs_ = self._vec_normalize_env.get_original_obs()
-                        reward_ = self._vec_normalize_env.get_original_reward()
-                    else:
-                        # Avoid changing the original ones
-                        self._last_original_obs, new_obs_, reward_ = self._last_obs, new_obs, reward
-
-                    next_obs = infos[0]["terminal_observation"].detach().cpu().numpy() if done else new_obs_
-
-                    future_reward = None
-                    if not self.use_target:
-                        with th.no_grad():
-                            future_reward = self.q_net.forward(th.tensor(next_obs, device=self.device)).max(dim=1)[0].detach().cpu().numpy()
-
-                    replay_buffer.add(self._last_original_obs, next_obs, buffer_action, reward_, infos[0]["change"], done, infos[0]["terminal_state"], future_reward)
-
-                self._last_obs = new_obs
-                # Save the unnormalized observation
+            # Store data in replay buffer
+            if replay_buffer is not None:
+                # Store only the unnormalized version
                 if self._vec_normalize_env is not None:
-                    self._last_original_obs = new_obs_
+                    new_obs_ = self._vec_normalize_env.get_original_obs()
+                    reward_ = self._vec_normalize_env.get_original_reward()
+                else:
+                    # Avoid changing the original ones
+                    self._last_original_obs, new_obs_, reward_ = self._last_obs, new_obs, reward
 
-                self._update_current_progress_remaining(self.num_timesteps, self._total_timesteps)
+                #TODO review with Hanna
+                next_obs = new_obs_
+                next_obs = [new_obs_[x] if not done[x] else infos[x]['terminal_observation'].detach().cpu().numpy() for x in range(env.num_envs)]
+                # next_obs[done_indices] = infos[done_indices]['terminal_state'].detach().cpu().numpy() 
 
-                # For DQN, check if the target network should be updated
-                # and update the exploration schedule
-                # For SAC/TD3, the update is done as the same time as the gradient update
-                # see https://github.com/hill-a/stable-baselines/issues/900
-                self._on_step()
+                future_reward = np.full(env.num_envs, None)
+                if not self.use_target:
+                    with th.no_grad():
+                        future_reward = self.q_net.forward(th.tensor(next_obs, device=self.device)).max(dim=1)[0].detach().cpu().numpy()
 
-                if 0 < n_steps <= total_steps:
-                    break
+                change = [d['change'] for d in infos]
+                terminal = [d['terminal_state'] for d in infos]
+                tupels = zip(self._last_original_obs, new_obs, buffer_action, reward_, change, done, terminal, future_reward)
+                for (_last, next, action, reward, change, done, terminal, future) in tupels:
+                    replay_buffer.add(_last, next, action, reward, change, done, terminal, future)
 
+            self._last_obs = new_obs
+            # Save the unnormalized observation
+            if self._vec_normalize_env is not None:
+                self._last_original_obs = new_obs_
+
+            self._update_current_progress_remaining(self.num_timesteps, self._total_timesteps)
+
+            # For DQN, check if the target network should be updated
+            # and update the exploration schedule
+            # For SAC/TD3, the update is done as the same time as the gradient update
+            # see https://github.com/hill-a/stable-baselines/issues/900
+            self._on_step()            
+
+            total_episodes += done_indices.size
+            self._episode_num += done_indices.size
+            episode_rewards.extend(episode_reward[done_indices])
+            total_timesteps.extend(episode_timesteps[done_indices])
+
+            episode_reward[done_indices] = 0.0
+            episode_timesteps[done_indices] = 0
+
+
+            '''
             if done:
                 total_episodes += 1
                 self._episode_num += 1
                 episode_rewards.append(episode_reward)
                 total_timesteps.append(episode_timesteps)
+            '''
+            #TODO what to do here?
+            #if action_noise is not None:
+            #    action_noise.reset()
 
-                if action_noise is not None:
-                    action_noise.reset()
-
-                # Log training infos
-                if log_interval is not None and self._episode_num % log_interval == 0:
-                    self._dump_logs()
+            # Log training infos
+            if log_interval is not None and done.any():
+                self._dump_logs()
 
         mean_reward = np.mean(episode_rewards) if total_episodes > 0 else 0.0
 

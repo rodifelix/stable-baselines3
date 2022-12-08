@@ -119,15 +119,17 @@ class LightHGNetwork(BasePolicy):
             
         else:
             actions = th.arange(start=0, end=self.num_rotations*self.heightmap_resolution*self.heightmap_resolution, dtype=th.long).to(self.device)
-            actions = actions.reshape((1, self.num_rotations, self.heightmap_resolution, self.heightmap_resolution))
+            actions = actions.repeat(observation.size()[0], 1)
+            actions = actions.reshape((observation.size()[0], self.num_rotations, self.heightmap_resolution, self.heightmap_resolution))
 
             masked_actions = self.explore_mask(observation, actions)
 
-            valid_idx = masked_actions[masked_actions >= 0]
+            valid_idx = [x[x >= 0] for x in masked_actions]
             if len(valid_idx) > 0:
-                choice = np.random.randint(low=0, high=len(valid_idx))
-                valid_idx = valid_idx.type(th.long)
-                action = valid_idx[choice].reshape(-1)
+                choices = [np.random.randint(low=0, high=len(idx)) for idx in valid_idx]
+                #valid_idx = valid_idx.type(th.long)
+                tupels = zip(valid_idx, choices)
+                action = th.tensor([idx[choice] for (idx, choice) in tupels]).type(th.long)
             else:
                 raise NoObjectsInSceneException("No valid actions after mask. Is scene empty?")
 
