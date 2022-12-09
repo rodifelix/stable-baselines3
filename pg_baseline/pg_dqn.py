@@ -461,7 +461,7 @@ class PGDQN(OffPolicyAlgorithm):
             reset_num_timesteps=reset_num_timesteps,
         )
 
-        np.savetxt(os.path.join(self.tensorboard_log, '..', "training_log.txt"), self.train_counter, fmt='%i %i')
+        np.savetxt(os.path.join(self.tensorboard_log.replace('tensorboard_log/', 'training_log.txt')), self.train_counter, fmt='%i %i')
         print("Total runtime sample", self.sample_time)
         print("Total runtime backward", self.backward_time)
         return self
