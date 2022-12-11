@@ -281,9 +281,10 @@ class PGDQN(OffPolicyAlgorithm):
             end_backward_time = time.time()  
             self.backward_time += end_backward_time-start_backward_time 
 
-            iterations = replay_data.iterations.detach().cpu().numpy()
-            np.add.at(self.train_counter[:,0], iterations, 1)
-            self.train_counter[iterations,1] = replay_data.n_length.detach().cpu().numpy()
+            # TODO look at this again issues with multidimensional
+            # iterations = replay_data.iterations.detach().cpu().numpy()
+            # np.add.at(self.train_counter[:,0], iterations, 1)
+            # self.train_counter[iterations,1] = replay_data.n_length.detach().cpu().numpy()
             new_surprise_values = np.abs(current_q.detach().cpu().numpy() - target_q.detach().cpu().numpy())
             self.replay_buffer.update_sample_surprise_values(new_surprise_values)
 
@@ -560,7 +561,7 @@ class PGDQN(OffPolicyAlgorithm):
 
                 change = [d['change'] for d in infos]
                 terminal = [d['terminal_state'] for d in infos]
-                tupels = zip(self._last_original_obs, new_obs, buffer_action, reward_, change, done, terminal, future_reward)
+                tupels = zip(self._last_original_obs, next_obs, buffer_action, reward_, change, done, terminal, future_reward)
                 for (_last, next, action, reward, change, done, terminal, future) in tupels:
                     replay_buffer.add(_last, next, action, reward, change, done, terminal, future)
 
