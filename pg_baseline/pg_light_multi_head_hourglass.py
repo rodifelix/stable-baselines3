@@ -171,7 +171,7 @@ class Push_Into_Box_Net(Module):
             state_value = self.head_reward_state(out_net).unsqueeze(-1).unsqueeze(-1)
             out_reward = state_value.add(out_reward - out_reward.mean(dim=[1,2,3], keepdim=True))
         
-        print('out reward size: ', out_reward.size())
+        # print('out reward size: ', out_reward.size())
 
         mask = out_mask >= 0.14
         mask = mask.float() - 1.
