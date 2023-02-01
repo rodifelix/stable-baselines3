@@ -40,7 +40,7 @@ from torch.nn import (
     Sigmoid,
     Upsample,
     MaxPool2d,
-    BatchNorm2d,
+    InstanceNorm2d,
 )
 
 class Push_Into_Box_Net(Module):
@@ -78,17 +78,17 @@ class Push_Into_Box_Net(Module):
         self.preprocess = Sequential(
             Conv2d(self.num_input_channels, 32, 5, stride=1, padding=2),
             ReLU(),
-            BatchNorm2d(32),
+            InstanceNorm2d(32, affine=True),
             Conv2d(32, self.num_inp_feat_channels, 3, stride=1, padding=1),
             ReLU(),
-            BatchNorm2d(self.num_inp_feat_channels),
+            InstanceNorm2d(self.num_inp_feat_channels, affine=True),
         )
 
         # Mask head
         self.head_mask = Sequential(
             Conv2d(self.num_out_feat_channels, 24, 3, stride=1, padding=1),
             ReLU(),
-            BatchNorm2d(24),
+            InstanceNorm2d(24, affine=True),
             Conv2d(24, self.num_out_channels, 3, stride=1, padding=1),
             Sigmoid()
         )
@@ -97,7 +97,7 @@ class Push_Into_Box_Net(Module):
         self.head_reward = Sequential(
             Conv2d(self.num_out_feat_channels, 24, 3, stride=1, padding=1),
             ReLU(),
-            BatchNorm2d(24),
+            InstanceNorm2d(24, affine=True),
             Conv2d(24, self.num_out_channels, 3, stride=1, padding=1)
         )
 
@@ -156,27 +156,27 @@ class Network_hg(Module):
         self.B1 = Sequential(
             Conv2d(self.num_inp_feat_channels, 64, 3, stride=1, padding=1),
             ReLU(True),
-            BatchNorm2d(64)
+            InstanceNorm2d(64, affine=True)
         )
         self.B2 = Sequential(
             Conv2d(64, 64, 3, stride=1, padding=1),
             ReLU(True),
-            BatchNorm2d(64)
+            InstanceNorm2d(64, affine=True)
         )
         self.B3 = Sequential(
             Conv2d(64, 64, 3, stride=1, padding=1),
             ReLU(True),
-            BatchNorm2d(64)
+            InstanceNorm2d(64, affine=True)
         )
         self.B4 = Sequential(
             Conv2d(64, 128, 3, stride=1, padding=1),
             ReLU(True),
-            BatchNorm2d(128)
+            InstanceNorm2d(128, affine=True)
         )
         self.B5 = Sequential(
             Conv2d(128, 128, 3, stride=1, padding=1),
             ReLU(True),
-            BatchNorm2d(128)
+            InstanceNorm2d(128, affine=True)
         )
 
         # Max pooling layers
@@ -195,39 +195,39 @@ class Network_hg(Module):
         self.S4 = Sequential(
             Conv2d(128, 64, 1, 1, padding=0),
             ReLU(),
-            BatchNorm2d(64)
+            InstanceNorm2d(64, affine=True)
         )
         self.S3 = Sequential(
             Conv2d(64, 64, 1, 1, padding=0),
             ReLU(),
-            BatchNorm2d(64)
+            InstanceNorm2d(64, affine=True)
         )
         self.S2 = Sequential(
             Conv2d(64, 32, 1, 1, padding=0),
             ReLU(),
-            BatchNorm2d(32)
+            InstanceNorm2d(32, affine=True)
         )
 
         # Bottom-up convolutional layers
         self.R4 = Sequential(
             Conv2d(192, 64, 3, 1, padding=1),
             ReLU(),
-            BatchNorm2d(64)
+            InstanceNorm2d(64, affine=True)
         )
         self.R3 = Sequential(
             Conv2d(128, 64, 3, 1, padding=1),
             ReLU(),
-            BatchNorm2d(64)
+            InstanceNorm2d(64, affine=True)
         )
         self.R2 = Sequential(
             Conv2d(96, 64, 3, 1, padding=1),
             ReLU(),
-            BatchNorm2d(64)
+            InstanceNorm2d(64, affine=True)
         )
         self.R1 = Sequential(
             Conv2d(64, self.num_out_feat_channels, 3, 1, padding=1),
             ReLU(),
-            BatchNorm2d(self.num_out_feat_channels)
+            InstanceNorm2d(self.num_out_feat_channels, affine=True)
         )
 
     def forward(self, x):
