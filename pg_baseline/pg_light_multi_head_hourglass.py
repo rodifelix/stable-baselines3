@@ -25,6 +25,8 @@
 import os
 import sys
 import cv2
+from pg_baseline.NoisyConv2d import NoisyConv2d
+from pg_baseline.NoisyLinear import NoisyLinear
 import torch
 import numpy as np
 import torch.nn as nn
@@ -41,6 +43,7 @@ from torch.nn import (
     Upsample,
     MaxPool2d,
     InstanceNorm2d,
+    Flatten
 )
 
 class Push_Into_Box_Net(Module):
@@ -52,6 +55,8 @@ class Push_Into_Box_Net(Module):
         num_inp_feat_channels = 64,
         num_out_feat_channels = 32,
         positional_encoding = False,
+        noisy = False, #only affects reward head! mask stays the same
+        dueling = False #only affects reward head! mask stays the same
     ):
 
         super(Push_Into_Box_Net, self).__init__()
@@ -62,6 +67,8 @@ class Push_Into_Box_Net(Module):
         self.num_out_channels = num_out_channels
         self.num_inp_feat_channels = num_inp_feat_channels
         self.num_out_feat_channels = num_out_feat_channels
+        self.noisy = noisy
+        self.dueling = dueling
 
         # Number of input channels
         self.num_input_channels = 1  # Depth image
@@ -94,12 +101,40 @@ class Push_Into_Box_Net(Module):
         )
 
         # Reward head
-        self.head_reward = Sequential(
-            Conv2d(self.num_out_feat_channels, 24, 3, stride=1, padding=1),
-            ReLU(),
-            InstanceNorm2d(24, affine=True),
-            Conv2d(24, self.num_out_channels, 3, stride=1, padding=1)
-        )
+        if (self.noisy):
+            self.head_reward = Sequential(
+                NoisyConv2d(self.num_out_feat_channels, 24, 3, stride=1, padding=1),
+                ReLU(),
+                InstanceNorm2d(24, affine=True),
+                NoisyConv2d(24, self.num_out_channels, 3, stride=1, padding=1)
+            )
+
+            if (self.dueling):
+                self.head_reward_state = Sequential(
+                    NoisyConv2d(self.num_out_feat_channels, 24, 3, stride=1, padding=1),
+                    ReLU(),
+                    InstanceNorm2d(24, affine=True),
+                    NoisyConv2d(24, 1, 3, stride=1, padding=1),
+                    Flatten(),
+                    NoisyLinear(self.img_shape[0]**2, 1)
+                )
+        else:
+            self.head_reward = Sequential(
+                Conv2d(self.num_out_feat_channels, 24, 3, stride=1, padding=1),
+                ReLU(),
+                InstanceNorm2d(24, affine=True),
+                Conv2d(24, self.num_out_channels, 3, stride=1, padding=1)
+            )
+
+            if (self.dueling):
+                self.head_reward_state = Sequential(
+                    Conv2d(self.num_out_feat_channels, 24, 3, stride=1, padding=1),
+                    ReLU(),
+                    InstanceNorm2d(24, affine=True),
+                    Conv2d(24, 1, 3, stride=1, padding=1),
+                    Flatten(),
+                    Linear(self.img_shape[0]**2, 1)
+                )
 
         # Spatial/positional encoding
         if self.pos_encoding:
@@ -131,6 +166,12 @@ class Push_Into_Box_Net(Module):
         # Multi-heads outputs
         out_mask = self.head_mask(out_net)
         out_reward = self.head_reward(out_net)
+
+        if (self.dueling):
+            state_value = self.head_reward_state(out_net).unsqueeze(-1).unsqueeze(-1)
+            out_reward = state_value.add(out_reward - out_reward.mean(dim=[1,2,3], keepdim=True))
+        
+        print('out reward size: ', out_reward.size())
 
         mask = out_mask >= 0.14
         mask = mask.float() - 1.

@@ -42,7 +42,12 @@ class LightHGNetwork(BasePolicy):
 
         self.num_rotations = num_rotations
 
-        self.net = pg_light_multi_head_hourglass.Push_Into_Box_Net(device = self.device, img_shape = [heightmap_resolution, heightmap_resolution], num_out_feat_channels=num_rotations)
+        self.net = pg_light_multi_head_hourglass.Push_Into_Box_Net(
+            device = self.device,
+            img_shape = [heightmap_resolution, heightmap_resolution],
+            num_out_feat_channels=num_rotations,
+            noisy=noisy,
+            dueling=dueling)
         self.ucb_confidence = ucb_confidence
 
         if self.ucb_confidence > 0:
