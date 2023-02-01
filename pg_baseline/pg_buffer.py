@@ -180,7 +180,7 @@ class PGBuffer(ReplayBuffer):
                     change=initial_change,
                     done=last_done,
                     terminal_state=last_terminal,
-                    n_counter=len(self.n_step_storage),
+                    n_counter=len(self.n_step_storage[idx]),
                     iteration=initial_iteration,
                     future_reward=last_future_reward
                     )
