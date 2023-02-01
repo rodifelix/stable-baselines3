@@ -69,7 +69,7 @@ class PGBuffer(ReplayBuffer):
     ):
         super(ReplayBuffer, self).__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
 
-        assert n_envs == 1, "Replay buffer only support single environment for now"
+        # assert n_envs == 1, "Replay buffer only support single environment for now"
 
         # Check that the replay buffer can fit into the memory
         if psutil is not None:
@@ -98,7 +98,7 @@ class PGBuffer(ReplayBuffer):
 
         self.prio_exp = prio_exp
 
-        self.n_step_storage = deque()
+        self.n_step_storage = [deque() for i in range(n_envs)]
 
         self.unsampled_pos_start = 0
 
@@ -123,70 +123,71 @@ class PGBuffer(ReplayBuffer):
                     f"replay buffer {total_memory_usage:.2f}GB > {mem_available:.2f}GB"
                 )
 
-    def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: bool, done: np.ndarray, terminal_state: bool, future_reward: np.ndarray = None) -> None:
-        if not change:
-            # Copy to avoid modification by reference
-            self._add(
-                obs=np.array(obs).copy(),
-                next_obs=np.array(next_obs).copy(),
-                action=np.array(action).copy(),
-                reward=np.array(reward).copy(),
-                change=np.array(change),
-                done=np.array(done).copy(),
-                terminal_state=np.array(terminal_state),
-                n_counter=1,
-                iteration=self.iteration_counter,
-                future_reward=None if future_reward is None else np.array(future_reward).copy()
-                )
-        else:
-            # Copy to avoid modification by reference
-            to_store = {
-                "obs" : np.array(obs).copy(),
-                "next_obs" : np.array(next_obs).copy(),
-                "action" : np.array(action).copy(),
-                "reward" : np.array(reward).copy(),
-                "change" : np.array(change),
-                "done" : np.array(done).copy(),
-                "terminal_state" : np.array(terminal_state),
-                "future_reward" : None if future_reward is None else np.array(future_reward).copy(),
-                "iteration" : self.iteration_counter
-            }
-            
-            self.n_step_storage.append(to_store)
+    def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: np.ndarray, done: np.ndarray, terminal_state: np.ndarray, future_reward: np.ndarray = None) -> None:
+        for idx in range(obs.shape[0]):
+            if not change[idx]:
+                # Copy to avoid modification by reference
+                self._add(
+                    obs=np.array(obs[idx]).copy(),
+                    next_obs=np.array(next_obs[idx]).copy(),
+                    action=np.array(action[idx]).copy(),
+                    reward=np.array(reward[idx]).copy(),
+                    change=np.array(change[idx]),
+                    done=np.array(done[idx]).copy(),
+                    terminal_state=np.array(terminal_state[idx]),
+                    n_counter=1,
+                    iteration=self.iteration_counter,
+                    future_reward=None if future_reward[idx] is None else np.array(future_reward[idx]).copy()
+                    )
+            else:
+                # Copy to avoid modification by reference
+                to_store = {
+                    "obs" : np.array(obs[idx]).copy(),
+                    "next_obs" : np.array(next_obs[idx]).copy(),
+                    "action" : np.array(action[idx]).copy(),
+                    "reward" : np.array(reward[idx]).copy(),
+                    "change" : np.array(change[idx]),
+                    "done" : np.array(done[idx]).copy(),
+                    "terminal_state" : np.array(terminal_state[idx]),
+                    "future_reward" : None if future_reward[idx] is None else np.array(future_reward[idx]).copy(),
+                    "iteration" : self.iteration_counter
+                }
+                
+                self.n_step_storage[idx].append(to_store)
 
-        if len(self.n_step_storage) > 0 and ((change and terminal_state) or done or len(self.n_step_storage) >= self.n_step):
-            initial_obs = self.n_step_storage[0]["obs"]
-            last_next_obs = self.n_step_storage[-1]["next_obs"]
-            initial_action = self.n_step_storage[0]["action"]
+            if len(self.n_step_storage[idx]) > 0 and ((change[idx] and terminal_state[idx]) or done[idx] or len(self.n_step_storage[idx]) >= self.n_step):
+                initial_obs = self.n_step_storage[idx][0]["obs"]
+                last_next_obs = self.n_step_storage[idx][-1]["next_obs"]
+                initial_action = self.n_step_storage[idx][0]["action"]
 
-            reward_sum = 0
-            for i in range(len(self.n_step_storage)):
-                reward_sum += (self.gamma ** i) * self.n_step_storage[i]["reward"]
+                reward_sum = 0
+                for i in range(len(self.n_step_storage[idx])):
+                    reward_sum += (self.gamma ** i) * self.n_step_storage[idx][i]["reward"]
 
-            initial_change = self.n_step_storage[0]["change"]
-            last_terminal = self.n_step_storage[-1]["terminal_state"]
-            last_done = self.n_step_storage[-1]["done"]
+                initial_change = self.n_step_storage[idx][0]["change"]
+                last_terminal = self.n_step_storage[idx][-1]["terminal_state"]
+                last_done = self.n_step_storage[idx][-1]["done"]
 
-            last_future_reward = self.n_step_storage[-1]["future_reward"]
+                last_future_reward = self.n_step_storage[idx][-1]["future_reward"]
 
-            initial_iteration = self.n_step_storage[0]["iteration"]
+                initial_iteration = self.n_step_storage[idx][0]["iteration"]
 
-            self._add(
-                obs=initial_obs,
-                next_obs=last_next_obs,
-                action=initial_action,
-                reward=reward_sum,
-                change=initial_change,
-                done=last_done,
-                terminal_state=last_terminal,
-                n_counter=len(self.n_step_storage),
-                iteration=initial_iteration,
-                future_reward=last_future_reward
-                )
+                self._add(
+                    obs=initial_obs,
+                    next_obs=last_next_obs,
+                    action=initial_action,
+                    reward=reward_sum,
+                    change=initial_change,
+                    done=last_done,
+                    terminal_state=last_terminal,
+                    n_counter=len(self.n_step_storage),
+                    iteration=initial_iteration,
+                    future_reward=last_future_reward
+                    )
 
-            self.n_step_storage.clear()
+                self.n_step_storage[idx].clear()
 
-        self.iteration_counter += 1
+            self.iteration_counter += 1
 
 
     def _add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: np.ndarray, done: np.ndarray, terminal_state: np.ndarray, n_counter: int, iteration: int, future_reward: np.ndarray = None) -> None:

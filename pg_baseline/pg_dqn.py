@@ -164,6 +164,8 @@ class PGDQN(OffPolicyAlgorithm):
         self.trainings_starts = learning_starts
 
         self.testing_mode = testing_mode
+        # needed for replay buffer to follow trajectories
+        self.num_envs = env.num_envs
 
         self.update_mask = update_mask and self.net_class == "HG_Mask"
 
@@ -187,7 +189,8 @@ class PGDQN(OffPolicyAlgorithm):
                     optimize_memory_usage=self.optimize_memory_usage,
                     save_future_rewards=not self.use_target,
                     n_step= 1, # will be set to self.n_step after "training_starts" iterations
-                    prio_exp=self.use_prio_exp
+                    prio_exp=self.use_prio_exp,
+                    n_envs=self.num_envs
                 )
             else:
                 self.replay_buffer.device = self.device
@@ -561,9 +564,13 @@ class PGDQN(OffPolicyAlgorithm):
 
                 change = [d['change'] for d in infos]
                 terminal = [d['terminal_state'] for d in infos]
+                # previously stored each experience one by one
+                '''
                 tupels = zip(self._last_original_obs, next_obs, buffer_action, reward_, change, done, terminal, future_reward)
                 for (_last, next, action, reward, change, done, terminal, future) in tupels:
                     replay_buffer.add(_last, next, action, reward, change, done, terminal, future)
+                '''
+                replay_buffer.add(self._last_original_obs, next_obs, buffer_action, reward_, change, done, terminal, future_reward)
 
             self._last_obs = new_obs
             # Save the unnormalized observation
