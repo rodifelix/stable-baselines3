@@ -75,6 +75,15 @@ class PGBuffer(ReplayBuffer):
         if psutil is not None:
             mem_available = psutil.virtual_memory().available
 
+        '''
+        The way we build the replay buffer it makes no sense to have n_env dimensional arrays for the different information.
+        We want to learn together from all envs. The only part that needs to be n_env dimensional is the n_step_storage, to 
+        accurately predict the Q-Value. Therefore we exchange the dimension from being n_env dimensional to 1 again
+        '''
+        self.num_envs = n_envs
+        self.n_envs = 1
+
+
         self.optimize_memory_usage = optimize_memory_usage
         self.observations = np.zeros((self.buffer_size, self.n_envs) + self.obs_shape, dtype=observation_space.dtype)
         if optimize_memory_usage:
@@ -98,7 +107,7 @@ class PGBuffer(ReplayBuffer):
 
         self.prio_exp = prio_exp
 
-        self.n_step_storage = [deque() for i in range(n_envs)]
+        self.n_step_storage = [deque() for i in range(self.num_envs)]
 
         self.unsampled_pos_start = 0
 
