@@ -165,7 +165,8 @@ class PGDQN(OffPolicyAlgorithm):
 
         self.testing_mode = testing_mode
         # needed for replay buffer to follow trajectories
-        self.num_envs = env.num_envs
+        if env is not None :
+            self.num_envs = env.num_envs
 
         self.update_mask = update_mask and self.net_class == "HG_Mask"
 
