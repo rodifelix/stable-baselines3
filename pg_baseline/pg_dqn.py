@@ -102,6 +102,7 @@ class PGDQN(OffPolicyAlgorithm):
         n_step = 1,
         reward_loss_weight: float = 1.0,
         mask_loss_weight: float = 1.0,
+        model_save_interval = None,
     ):
         if optimize_memory_usage:
             raise NotImplementedError("Optimize memory usage not supported")
@@ -168,6 +169,9 @@ class PGDQN(OffPolicyAlgorithm):
         if env is not None :
             self.num_envs = env.num_envs
 
+        self.model_save_interval = model_save_interval
+        self.model_save_path = tensorboard_log.replace('tensorboard_log/', 'direct_models/')
+
         self.update_mask = update_mask and self.net_class == "HG_Mask"
 
         if _init_setup_model:
@@ -231,6 +235,10 @@ class PGDQN(OffPolicyAlgorithm):
                 if self.use_target:
                     polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
                 self.gamma = self.gamma_schedule(self._current_progress_remaining)
+            
+            if self.model_save_interval and self.num_timesteps % self.model_save_interval == 0:
+                os.makedirs(self.model_save_path, exist_ok=True)
+                self.save(self.model_save_path + f'pqn_with_target_{self.num_timesteps}_steps.zip')
 
         self.exploration_rate = self.exploration_schedule(self._current_progress_remaining)
         logger.record("rollout/exploration rate", self.exploration_rate)
