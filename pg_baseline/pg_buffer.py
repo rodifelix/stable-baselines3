@@ -165,39 +165,47 @@ class PGBuffer(ReplayBuffer):
                 self.n_step_storage[idx].append(to_store)
 
             if len(self.n_step_storage[idx]) > 0 and ((change[idx] and terminal_state[idx]) or done[idx] or len(self.n_step_storage[idx]) >= self.n_step):
-                initial_obs = self.n_step_storage[idx][0]["obs"]
-                last_next_obs = self.n_step_storage[idx][-1]["next_obs"]
-                initial_action = self.n_step_storage[idx][0]["action"]
+                # add first experience to the buffer
+                self.build_experience(idx)
 
-                reward_sum = 0
-                for i in range(len(self.n_step_storage[idx])):
-                    reward_sum += (self.gamma ** i) * self.n_step_storage[idx][i]["reward"]
-
-                initial_change = self.n_step_storage[idx][0]["change"]
-                last_terminal = self.n_step_storage[idx][-1]["terminal_state"]
-                last_done = self.n_step_storage[idx][-1]["done"]
-
-                last_future_reward = self.n_step_storage[idx][-1]["future_reward"]
-
-                initial_iteration = self.n_step_storage[idx][0]["iteration"]
-
-                self._add(
-                    obs=initial_obs,
-                    next_obs=last_next_obs,
-                    action=initial_action,
-                    reward=reward_sum,
-                    change=initial_change,
-                    done=last_done,
-                    terminal_state=last_terminal,
-                    n_counter=len(self.n_step_storage[idx]),
-                    iteration=initial_iteration,
-                    future_reward=last_future_reward
-                    )
-
-                self.n_step_storage[idx].clear()
+                # if terminal state is reached we have to clear the n_step_storage and store all elements to the buffer
+                if done[idx] or terminal_state[idx]:
+                    for x in range(len(self.n_step_storage[idx])):
+                        self.build_experience(idx)
 
             self.iteration_counter += 1
 
+    def build_experience(self, idx: int) -> None:
+        initial_obs = self.n_step_storage[idx][0]["obs"]
+        last_next_obs = self.n_step_storage[idx][-1]["next_obs"]
+        initial_action = self.n_step_storage[idx][0]["action"]
+
+        reward_sum = 0
+        for i in range(len(self.n_step_storage[idx])):
+            reward_sum += (self.gamma ** i) * self.n_step_storage[idx][i]["reward"]
+
+        initial_change = self.n_step_storage[idx][0]["change"]
+        last_terminal = self.n_step_storage[idx][-1]["terminal_state"]
+        last_done = self.n_step_storage[idx][-1]["done"]
+
+        last_future_reward = self.n_step_storage[idx][-1]["future_reward"]
+
+        initial_iteration = self.n_step_storage[idx][0]["iteration"]
+
+        self._add(
+            obs=initial_obs,
+            next_obs=last_next_obs,
+            action=initial_action,
+            reward=reward_sum,
+            change=initial_change,
+            done=last_done,
+            terminal_state=last_terminal,
+            n_counter=len(self.n_step_storage[idx]),
+            iteration=initial_iteration,
+            future_reward=last_future_reward
+            )
+
+        self.n_step_storage[idx].popleft()
 
     def _add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, change: np.ndarray, done: np.ndarray, terminal_state: np.ndarray, n_counter: int, iteration: int, future_reward: np.ndarray = None) -> None:
         self.observations[self.pos] = obs
