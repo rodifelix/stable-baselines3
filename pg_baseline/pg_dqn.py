@@ -169,8 +169,9 @@ class PGDQN(OffPolicyAlgorithm):
         if env is not None :
             self.num_envs = env.num_envs
 
-        self.model_save_interval = model_save_interval
-        self.model_save_path = tensorboard_log.replace('tensorboard_log/', 'direct_models/')
+        if model_save_interval:
+            self.model_save_interval = model_save_interval
+            self.model_save_path = tensorboard_log.replace('tensorboard_log/', 'direct_models/')
 
         self.update_mask = update_mask and self.net_class == "HG_Mask"
 
